@@ -1,4 +1,4 @@
-from app.scripts.init_data import insertar_roles
+from app.scripts.init_data import seed_all_data
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,7 @@ async def on_startup():
 
     # llenar la base de datos con datos iniciales
     print("Insertando roles iniciales...")
-    await insertar_roles()
+    await seed_all_data()
 
 
 @app.post("/login", response_model=schemas.Token)
