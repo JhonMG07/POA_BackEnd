@@ -87,8 +87,8 @@ class Periodo(Base):
     nombre_periodo = Column(String(50), nullable=False)
     fecha_inicio = Column(Date, nullable=False)
     fecha_fin = Column(Date, nullable=False)
-    anio = Column(String(4))
-    mes = Column(String(15))
+    anio = Column(String(4), nullable=True)
+    mes = Column(String(15), nullable=True)
 
 class EstadoPOA(Base):
     __tablename__ = "ESTADO_POA"
