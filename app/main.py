@@ -232,7 +232,7 @@ async def crear_proyecto(
     if not result.scalars().first():
         raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
 
-    nuevo = Proyecto(
+    nuevo = models.Proyecto(
         id_proyecto=uuid.uuid4(),
         codigo_proyecto=data.codigo_proyecto,
         titulo=data.titulo,
