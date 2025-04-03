@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app import models, schemas, auth
 from app.database import engine, get_db
+from app.middlewares import add_middlewares
 from app.scripts.init_data import seed_all_data
 from app.auth import get_current_user
 from passlib.context import CryptContext
@@ -14,7 +15,9 @@ from typing import List
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI()
-
+#middlewares
+# CORS middleware
+add_middlewares(app)
 
 @app.on_event("startup")
 async def on_startup():
@@ -49,7 +52,7 @@ async def login(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-
+#Usar para validar el usuario
 @app.get("/perfil")
 async def perfil_usuario(usuario: models.Usuario = Depends(get_current_user)):
     return {
@@ -82,6 +85,7 @@ async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get
     await db.refresh(nuevo_usuario)
     return nuevo_usuario
 
+#Periodos
 
 @app.post("/periodos/", response_model=schemas.PeriodoOut)
 async def crear_periodo(data: schemas.PeriodoCreate, db: AsyncSession = Depends(get_db),usuario: models.Usuario = Depends(get_current_user)):
@@ -154,3 +158,96 @@ async def listar_periodos(
     result = await db.execute(select(models.Periodo))
     periodos = result.scalars().all()
     return periodos
+
+#POA
+
+from datetime import datetime
+from app.models import Poa, EstadoPOA
+
+@app.post("/poas/", response_model=schemas.PoaOut)
+async def crear_poa(
+    data: schemas.PoaCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Validar que el proyecto exista
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == data.id_proyecto))
+    proyecto = result.scalars().first()
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Validar que el periodo exista
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == data.id_periodo))
+    periodo = result.scalars().first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
+
+    # Validar que el tipo POA exista
+    result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
+    tipo_poa = result.scalars().first()
+    if not tipo_poa:
+        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
+
+    # Obtener el estado "Ingresado"
+    result = await db.execute(select(EstadoPOA).where(EstadoPOA.nombre == "Ingresado"))
+    estado = result.scalars().first()
+    if not estado:
+        raise HTTPException(status_code=500, detail="Estado 'Ingresado' no está definido en la base de datos")
+
+    nuevo_poa = Poa(
+        id_poa=uuid.uuid4(),
+        id_proyecto=data.id_proyecto,
+        id_periodo=data.id_periodo,
+        codigo_poa=data.codigo_poa,
+        fecha_creacion=datetime.now(datetime.timezone.utc),
+        id_estado_poa=estado.id_estado_poa,
+        id_tipo_poa=data.id_tipo_poa,
+        anio_ejecucion=data.anio_ejecucion,
+        presupuesto_asignado=data.presupuesto_asignado
+    )
+
+    db.add(nuevo_poa)
+    await db.commit()
+    await db.refresh(nuevo_poa)
+
+    return nuevo_poa
+
+
+
+#Proyecto
+
+@app.post("/proyectos/", response_model=schemas.ProyectoOut)
+async def crear_proyecto(
+    data: schemas.ProyectoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Validar existencia de tipo de proyecto
+    result = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
+
+    # Validar existencia de estado de proyecto
+    result = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
+
+    nuevo = Proyecto(
+        id_proyecto=uuid.uuid4(),
+        codigo_proyecto=data.codigo_proyecto,
+        titulo=data.titulo,
+        id_tipo_proyecto=data.id_tipo_proyecto,
+        id_estado_proyecto=data.id_estado_proyecto,
+        id_director_proyecto=usuario.id_usuario,
+        fecha_creacion=data.fecha_creacion,
+        fecha_inicio=data.fecha_inicio,
+        fecha_fin=data.fecha_fin,
+        fecha_prorroga=data.fecha_prorroga,
+        tiempo_prorroga_meses=data.tiempo_prorroga_meses,
+        presupuesto_aprobado=data.presupuesto_aprobado
+    )
+
+    db.add(nuevo)
+    await db.commit()
+    await db.refresh(nuevo)
+    return nuevo

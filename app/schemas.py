@@ -1,6 +1,7 @@
+from decimal import Decimal
 from pydantic import BaseModel
 from uuid import UUID
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 class Token(BaseModel):
     access_token: str
@@ -33,6 +34,43 @@ class PeriodoCreate(BaseModel):
 
 class PeriodoOut(PeriodoCreate):
     id_periodo: UUID
+
+    class Config:
+        from_attributes = True
+
+class PoaCreate(BaseModel):
+    id_proyecto: UUID
+    id_periodo: UUID
+    codigo_poa: str
+    fecha_creacion: datetime
+    id_tipo_poa: UUID
+    anio_ejecucion: str
+    presupuesto_asignado: Decimal
+
+class PoaOut(PoaCreate):
+    id_poa: UUID
+    fecha_creacion: datetime
+    id_estado_poa: UUID
+
+    class Config:
+        from_attributes = True
+
+
+class ProyectoCreate(BaseModel):
+    codigo_proyecto: str
+    titulo: str
+    id_tipo_proyecto: UUID
+    id_estado_proyecto: UUID
+    fecha_creacion: datetime
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    fecha_prorroga: Optional[date] = None
+    tiempo_prorroga_meses: Optional[int] = None
+    presupuesto_aprobado: Optional[Decimal] = None
+
+class ProyectoOut(ProyectoCreate):
+    id_proyecto: UUID
+    id_director_proyecto: UUID
 
     class Config:
         from_attributes = True
