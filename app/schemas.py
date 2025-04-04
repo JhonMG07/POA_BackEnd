@@ -122,3 +122,18 @@ class TipoPoaOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PeriodoCreate(BaseModel):
+    codigo_periodo: str
+    nombre_periodo: str
+    fecha_inicio: date
+    fecha_fin: date
+    anio: Optional[str] = None
+    mes: Optional[str] = None
+
+class PeriodoOut(PeriodoCreate):
+    id_periodo: UUID
+
+    class Config:
+        from_attributes = True

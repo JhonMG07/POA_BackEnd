@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timezone
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,7 @@ from app.auth import get_current_user
 from passlib.context import CryptContext
 import uuid
 from typing import List
-
+from dateutil.relativedelta import relativedelta
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -159,6 +159,18 @@ async def listar_periodos(
     periodos = result.scalars().all()
     return periodos
 
+
+@app.get("/periodos/{id}", response_model=schemas.PeriodoOut)
+async def obtener_periodo(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == id))
+    periodo = result.scalars().first()
+
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
+
+    return periodo
+
+
 #POA
 
 @app.post("/poas/", response_model=schemas.PoaOut)
@@ -185,7 +197,15 @@ async def crear_poa(
     if not tipo_poa:
         raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
 
-    # Obtener el estado "Ingresado"
+    diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
+    duracion_meses = diferencia.months + diferencia.years * 12
+
+    if duracion_meses > tipo_poa.duracion_meses:
+        raise HTTPException(
+            status_code=400,
+            detail="El periodo excede la duración permitida por el tipo de POA"
+        )
+
     result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
     estado = result.scalars().first()
     if not estado:
@@ -196,7 +216,7 @@ async def crear_poa(
         id_proyecto=data.id_proyecto,
         id_periodo=data.id_periodo,
         codigo_poa=data.codigo_poa,
-        fecha_creacion=datetime.now(datetime.timezone.utc),
+        fecha_creacion=data.fecha_creacion,
         id_estado_poa=estado.id_estado_poa,
         id_tipo_poa=data.id_tipo_poa,
         anio_ejecucion=data.anio_ejecucion,
@@ -209,7 +229,134 @@ async def crear_poa(
 
     return nuevo_poa
 
+from dateutil.relativedelta import relativedelta
 
+@app.put("/poas/{id}", response_model=schemas.PoaOut)
+async def editar_poa(
+    id: uuid.UUID,
+    data: schemas.PoaCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar que el POA exista
+    result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id))
+    poa = result.scalars().first()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    # Verificar existencia del proyecto
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == data.id_proyecto))
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Verificar existencia del periodo
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == data.id_periodo))
+    periodo = result.scalars().first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
+
+    # Verificar existencia del tipo POA
+    result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
+    tipo_poa = result.scalars().first()
+    if not tipo_poa:
+        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
+
+    # Validar duración del periodo usando relativedelta
+    diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
+    duracion_meses = diferencia.months + diferencia.years * 12
+    if duracion_meses != tipo_poa.duracion_meses:
+        raise HTTPException(
+            status_code=400,
+            detail="La duración del periodo no coincide con el tipo de POA seleccionado"
+        )
+
+    # Estado se mantiene igual que antes
+    result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
+    estado = result.scalars().first()
+    if not estado:
+        raise HTTPException(status_code=500, detail="Estado 'Ingresado' no está definido")
+
+    # Actualizar el POA
+    poa.id_proyecto = data.id_proyecto
+    poa.id_periodo = data.id_periodo
+    poa.codigo_poa = data.codigo_poa
+    poa.fecha_creacion = data.fecha_creacion
+    poa.id_tipo_poa = data.id_tipo_poa
+    poa.id_estado_poa = estado.id_estado_poa  # o mantener el actual si no deseas sobreescribir
+    poa.anio_ejecucion = data.anio_ejecucion
+    poa.presupuesto_asignado = data.presupuesto_asignado
+
+    await db.commit()
+    await db.refresh(poa)
+    return poa
+
+@app.get("/poas/", response_model=List[schemas.PoaOut])
+async def listar_poas(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(select(models.Poa))
+    return result.scalars().all()
+
+@app.get("/poas/{id}", response_model=schemas.PoaOut)
+async def obtener_poa(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id))
+    poa = result.scalars().first()
+
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    return poa
+
+@app.get("/estados-poa/", response_model=List[schemas.EstadoPoaOut])
+async def listar_estados_poa(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.EstadoPOA))
+    return result.scalars().all()
+
+@app.get("/tipos-poa/", response_model=List[schemas.TipoPoaOut])
+async def listar_tipos_poa(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.TipoPOA))
+
+    return result.scalars().all()
+
+@app.post("/periodos/", response_model=schemas.PeriodoOut)
+async def crear_periodo(
+    data: schemas.PeriodoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    nuevo = models.Periodo(
+        id_periodo=uuid.uuid4(),
+        **data.dict()
+    )
+    db.add(nuevo)
+    await db.commit()
+    await db.refresh(nuevo)
+    return nuevo
+
+@app.put("/periodos/{id}", response_model=schemas.PeriodoOut)
+async def editar_periodo(
+    id: uuid.UUID,
+    data: schemas.PeriodoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == id))
+    periodo = result.scalars().first()
+
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
+
+    for key, value in data.dict().items():
+        setattr(periodo, key, value)
+
+    await db.commit()
+    await db.refresh(periodo)
+    return periodo
 
 #Proyecto
 
@@ -340,12 +487,3 @@ async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.EstadoProyecto))
     return result.scalars().all()
 
-@app.get("/estados-poa/", response_model=List[schemas.EstadoPoaOut])
-async def listar_estados_poa(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.EstadoPOA))
-    return result.scalars().all()
-
-@app.get("/tipos-poa/", response_model=List[schemas.TipoPoaOut])
-async def listar_tipos_poa(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.TipoPOA))
-    return result.scalars().all()
