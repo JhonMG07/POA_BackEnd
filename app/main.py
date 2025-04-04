@@ -295,3 +295,34 @@ async def editar_proyecto(
     await db.commit()
     await db.refresh(proyecto)
     return proyecto
+
+
+@app.get("/proyectos/", response_model=List[schemas.ProyectoOut])
+async def listar_proyectos(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.Proyecto)
+    )
+    proyectos = result.scalars().all()
+    return proyectos
+
+@app.get("/proyectos/{id}", response_model=schemas.ProyectoOut)
+async def obtener_proyecto(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.Proyecto).where(models.Proyecto.id_proyecto == id)
+    )
+    proyecto = result.scalars().first()
+
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # if proyecto.id_director_proyecto != usuario.id_usuario:
+    #     raise HTTPException(status_code=403, detail="No tienes acceso a este proyecto")
+
+    return proyecto
