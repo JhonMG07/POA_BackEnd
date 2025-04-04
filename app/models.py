@@ -72,8 +72,9 @@ class Proyecto(Base):
     fecha_creacion = Column(DateTime, nullable=False)
     fecha_inicio = Column(Date)
     fecha_fin = Column(Date)
-    fecha_prorroga = Column(Date)
-    tiempo_prorroga_meses = Column(Integer)
+    fecha_prorroga = Column(Date)  # fecha de solicitud de prórroga
+    fecha_prorroga_inicio = Column(Date, nullable= True)  # nueva fecha de inicio aprobada
+    fecha_prorroga_fin = Column(Date)     # nueva fecha de fin aprobada
 
     tipo_proyecto = relationship("TipoProyecto")
     estado_proyecto = relationship("EstadoProyecto")

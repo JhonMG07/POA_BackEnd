@@ -38,7 +38,6 @@ async def login(
         select(models.Usuario).filter(models.Usuario.email == form_data.username)
     )
     usuario = result.scalars().first()
-    print(f"Usuario encontrado: {usuario}")
     if not usuario or not auth.verificar_password(
         form_data.password, usuario.password_hash
     ):
@@ -243,7 +242,8 @@ async def crear_proyecto(
         fecha_inicio=data.fecha_inicio,
         fecha_fin=data.fecha_fin,
         fecha_prorroga=data.fecha_prorroga,
-        tiempo_prorroga_meses=data.tiempo_prorroga_meses,
+        fecha_prorroga_inicio=data.fecha_prorroga_inicio,
+        fecha_prorroga_fin=data.fecha_prorroga_fin,
         presupuesto_aprobado=data.presupuesto_aprobado
     )
 
@@ -251,3 +251,47 @@ async def crear_proyecto(
     await db.commit()
     await db.refresh(nuevo)
     return nuevo
+
+@app.put("/proyectos/{id}", response_model=schemas.ProyectoOut)
+async def editar_proyecto(
+    id: uuid.UUID,
+    data: schemas.ProyectoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Validar que el proyecto exista
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
+    proyecto = result.scalars().first()
+
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Validar que el usuario sea el director del proyecto
+    if proyecto.id_director_proyecto != usuario.id_usuario:
+        raise HTTPException(status_code=403, detail="Solo el director del proyecto puede editarlo")
+
+    # Validar tipo y estado
+    tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
+    if not tipo.scalars().first():
+        raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
+
+    estado = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
+    if not estado.scalars().first():
+        raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
+
+    # Actualizar campos
+    proyecto.codigo_proyecto = data.codigo_proyecto
+    proyecto.titulo = data.titulo
+    proyecto.id_tipo_proyecto = data.id_tipo_proyecto
+    proyecto.id_estado_proyecto = data.id_estado_proyecto
+    proyecto.fecha_creacion = data.fecha_creacion
+    proyecto.fecha_inicio = data.fecha_inicio
+    proyecto.fecha_fin = data.fecha_fin
+    proyecto.fecha_prorroga = data.fecha_prorroga
+    proyecto.fecha_prorroga_inicio = data.fecha_prorroga_inicio
+    proyecto.fecha_prorroga_fin = data.fecha_prorroga_fin
+    proyecto.presupuesto_aprobado = data.presupuesto_aprobado
+
+    await db.commit()
+    await db.refresh(proyecto)
+    return proyecto

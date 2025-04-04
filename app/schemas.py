@@ -65,7 +65,8 @@ class ProyectoCreate(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     fecha_prorroga: Optional[date] = None
-    tiempo_prorroga_meses: Optional[int] = None
+    fecha_prorroga_inicio: Optional[date] = None
+    fecha_prorroga_fin: Optional[date] = None
     presupuesto_aprobado: Optional[Decimal] = None
 
 class ProyectoOut(ProyectoCreate):
