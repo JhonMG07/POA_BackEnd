@@ -326,3 +326,18 @@ async def obtener_proyecto(
     #     raise HTTPException(status_code=403, detail="No tienes acceso a este proyecto")
 
     return proyecto
+
+@app.get("/roles/", response_model=List[schemas.RolOut])
+async def listar_roles(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Rol))
+    return result.scalars().all()
+
+@app.get("/tipos-proyecto/", response_model=List[schemas.TipoProyectoOut])
+async def listar_tipos_proyecto(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.TipoProyecto))
+    return result.scalars().all()
+
+@app.get("/estados-proyecto/", response_model=List[schemas.EstadoProyectoOut])
+async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.EstadoProyecto))
+    return result.scalars().all()

@@ -75,3 +75,29 @@ class ProyectoOut(ProyectoCreate):
 
     class Config:
         from_attributes = True
+
+
+class RolOut(BaseModel):
+    id_rol: UUID
+    nombre_rol: str
+    descripcion: str
+
+    class Config:
+        from_attributes = True
+
+class TipoProyectoOut(BaseModel):
+    id_tipo_proyecto: UUID
+    codigo_tipo: str
+    nombre: str
+    descripcion: str
+
+    class Config:
+        from_attributes = True
+
+class EstadoProyectoOut(BaseModel):
+    id_estado_proyecto: UUID
+    nombre: str
+    descripcion: str
+
+    class Config:
+        from_attributes = True
