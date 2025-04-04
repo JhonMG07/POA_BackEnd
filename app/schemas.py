@@ -101,3 +101,24 @@ class EstadoProyectoOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EstadoPoaOut(BaseModel):
+    id_estado_poa: UUID
+    nombre: str
+    descripcion: str
+
+    class Config:
+        from_attributes = True
+
+class TipoPoaOut(BaseModel):
+    id_tipo_poa: UUID
+    codigo_tipo: str
+    nombre: str
+    descripcion: Optional[str]
+    duracion_meses: int
+    cantidad_periodos: int
+    presupuesto_maximo: Decimal
+
+    class Config:
+        from_attributes = True

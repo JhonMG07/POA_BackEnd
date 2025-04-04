@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -160,9 +161,6 @@ async def listar_periodos(
 
 #POA
 
-from datetime import datetime
-from app.models import Poa, EstadoPOA
-
 @app.post("/poas/", response_model=schemas.PoaOut)
 async def crear_poa(
     data: schemas.PoaCreate,
@@ -188,12 +186,12 @@ async def crear_poa(
         raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
 
     # Obtener el estado "Ingresado"
-    result = await db.execute(select(EstadoPOA).where(EstadoPOA.nombre == "Ingresado"))
+    result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
     estado = result.scalars().first()
     if not estado:
         raise HTTPException(status_code=500, detail="Estado 'Ingresado' no está definido en la base de datos")
 
-    nuevo_poa = Poa(
+    nuevo_poa = models.Poa(
         id_poa=uuid.uuid4(),
         id_proyecto=data.id_proyecto,
         id_periodo=data.id_periodo,
@@ -340,4 +338,14 @@ async def listar_tipos_proyecto(db: AsyncSession = Depends(get_db)):
 @app.get("/estados-proyecto/", response_model=List[schemas.EstadoProyectoOut])
 async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.EstadoProyecto))
+    return result.scalars().all()
+
+@app.get("/estados-poa/", response_model=List[schemas.EstadoPoaOut])
+async def listar_estados_poa(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.EstadoPOA))
+    return result.scalars().all()
+
+@app.get("/tipos-poa/", response_model=List[schemas.TipoPoaOut])
+async def listar_tipos_poa(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.TipoPOA))
     return result.scalars().all()
