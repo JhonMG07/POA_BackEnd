@@ -487,3 +487,219 @@ async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.EstadoProyecto))
     return result.scalars().all()
 
+#actividades
+@app.post("/poas/{id_poa}/actividades")
+async def crear_actividades_para_poa(
+    id_poa: uuid.UUID,
+    data: schemas.ActividadesBatchCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar existencia del POA
+    result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id_poa))
+    poa = result.scalars().first()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    actividades = [
+        models.Actividad(
+            id_actividad=uuid.uuid4(),
+            id_poa=id_poa,
+            descripcion_actividad=act.descripcion_actividad,
+            total_por_actividad=0.00,
+            saldo_actividad=0.00,
+        )
+        for act in data.actividades
+    ]
+
+    db.add_all(actividades)
+    await db.commit()
+
+    return {"msg": f"{len(actividades)} actividades creadas correctamente"}
+
+
+#tareas
+@app.post("/actividades/{id_actividad}/tareas", response_model=schemas.TareaOut)
+async def crear_tarea(
+    id_actividad: uuid.UUID,
+    data: schemas.TareaCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar existencia de la actividad
+    result = await db.execute(select(models.Actividad).where(models.Actividad.id_actividad == id_actividad))
+    actividad = result.scalars().first()
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+
+    # Verificar existencia del detalle de tarea
+    result = await db.execute(select(models.DetalleTarea).where(models.DetalleTarea.id_detalle_tarea == data.id_detalle_tarea))
+    detalle = result.scalars().first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
+
+    total = data.precio_unitario * data.cantidad
+
+    nueva_tarea = models.Tarea(
+        id_tarea=uuid.uuid4(),
+        id_actividad=id_actividad,
+        id_detalle_tarea=data.id_detalle_tarea,
+        nombre=data.nombre,
+        detalle_descripcion=data.detalle_descripcion,
+        cantidad=data.cantidad,
+        precio_unitario=data.precio_unitario,
+        total=total,
+        saldo_disponible=total
+    )
+
+    # Actualizar montos en la actividad
+    actividad.total_por_actividad += total
+    actividad.saldo_actividad += total
+
+    db.add(nueva_tarea)
+    await db.commit()
+    await db.refresh(nueva_tarea)
+
+    return nueva_tarea
+
+
+@app.delete("/tareas/{id_tarea}")
+async def eliminar_tarea(id_tarea: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Tarea).where(models.Tarea.id_tarea == id_tarea))
+    tarea = result.scalars().first()
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    
+    await db.delete(tarea)
+    await db.commit()
+    return {"msg": "Tarea eliminada correctamente"}
+
+
+@app.put("/tareas/{id_tarea}")
+async def editar_tarea(
+    id_tarea: uuid.UUID, 
+    data: schemas.TareaUpdate, 
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+    ):
+    result = await db.execute(select(models.Tarea).where(models.Tarea.id_tarea == id_tarea))
+    tarea = result.scalars().first()
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    
+    # Campos a actualizar y auditar
+    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible"]
+
+    for campo in campos_auditar:
+        valor_anterior = getattr(tarea, campo)
+        valor_nuevo = getattr(data, campo)
+        
+        if valor_anterior != valor_nuevo:
+            # Registrar en histórico
+            historico = models.HistoricoPoa(
+                id_historico=uuid.uuid4(),
+                id_poa=tarea.actividad.id_poa,
+                id_usuario=usuario.id_usuario,
+                fecha_modificacion=datetime.utcnow(),
+                campo_modificado=campo,
+                valor_anterior=str(valor_anterior),
+                valor_nuevo=str(valor_nuevo),
+                justificacion="Actualización manual de tarea"
+            )
+            db.add(historico)
+            setattr(tarea, campo, valor_nuevo)
+
+    await db.commit()
+    await db.refresh(tarea)
+
+    return {"msg": "Tarea actualizada", "tarea": tarea}
+
+#detalles tarea por poa
+@app.get("/poas/{id_poa}/detalles_tarea", response_model=List[schemas.DetalleTareaOut])
+async def obtener_detalles_tarea_poa(
+    id_poa: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .join(models.TipoPoaDetalleTarea, models.DetalleTarea.id_detalle_tarea == models.TipoPoaDetalleTarea.id_detalle_tarea)
+        .join(models.Poa, models.TipoPoaDetalleTarea.id_tipo_poa == models.Poa.id_tipo_poa)
+        .where(models.Poa.id_poa == id_poa)
+    )
+    return result.scalars().all()
+
+
+#actividades por poa
+@app.get("/poas/{id_poa}/actividades", response_model=List[schemas.ActividadOut])
+async def obtener_actividades_de_poa(
+    id_poa: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_poa == id_poa)
+    )
+    return result.scalars().all()
+
+
+@app.delete("/actividades/{id_actividad}")
+async def eliminar_actividad(id_actividad: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Actividad).where(models.Actividad.id_actividad == id_actividad))
+    actividad = result.scalars().first()
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+    
+    await db.delete(actividad)
+    await db.commit()
+    return {"msg": "Actividad eliminada correctamente"}
+
+
+#tareas por actividad
+@app.get("/actividades/{id_actividad}/tareas", response_model=List[schemas.TareaOut])
+async def obtener_tareas_de_actividad(
+    id_actividad: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.Tarea).where(models.Tarea.id_actividad == id_actividad)
+    )
+    return result.scalars().all()
+
+
+#editar actividad
+@app.put("/actividades/{id_actividad}", response_model=schemas.ActividadOut)
+async def editar_actividad(
+    id_actividad: uuid.UUID,
+    data: schemas.ActividadUpdate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_actividad == id_actividad)
+    )
+    actividad = result.scalars().first()
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+
+    actividad.descripcion_actividad = data.descripcion_actividad
+    await db.commit()
+    await db.refresh(actividad)
+
+    return actividad
+
+async def registrar_historial_poa(db, poa_id, usuario_id, campo, valor_anterior, valor_nuevo, justificacion, reforma_id=None):
+    historial = models.HistoricoPoa(
+        id_historico=uuid.uuid4(),
+        id_poa=poa_id,
+        id_usuario=usuario_id,
+        fecha_modificacion=datetime.now(),
+        campo_modificado=campo,
+        valor_anterior=valor_anterior,
+        valor_nuevo=valor_nuevo,
+        justificacion=justificacion,
+        id_reforma=reforma_id
+    )
+    db.add(historial)
+    await db.commit()

@@ -1,8 +1,9 @@
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, condecimal
 from uuid import UUID
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional,List
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -137,3 +138,64 @@ class PeriodoOut(PeriodoCreate):
 
     class Config:
         from_attributes = True
+
+class ActividadCreate(BaseModel):
+    descripcion_actividad: str
+    total_por_actividad: Optional[condecimal(ge=0)] = 0.00
+class ActividadesBatchCreate(BaseModel):
+    actividades: List[ActividadCreate]
+
+class TareaCreate(BaseModel):
+    id_detalle_tarea: UUID
+    nombre: str
+    detalle_descripcion: str
+    cantidad: condecimal(gt=0)
+    precio_unitario: condecimal(gt=0)
+
+class TareaOut(BaseModel):
+    id_tarea: UUID
+    nombre: str
+    detalle_descripcion: str
+    cantidad: condecimal(gt=0)
+    precio_unitario: condecimal(gt=0)
+    total: condecimal(gt=0)
+    saldo_disponible: condecimal(gt=0)
+
+    class Config:
+        from_attributes = True
+
+class DetalleTareaOut(BaseModel):
+    id_detalle_tarea: UUID
+    nombre: str
+    descripcion: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+class ActividadOut(BaseModel):
+    id_actividad: UUID
+    descripcion_actividad: str
+    total_por_actividad: condecimal(max_digits=18, decimal_places=2)
+    saldo_actividad: condecimal(max_digits=18, decimal_places=2)
+
+    class Config:
+        from_attributes = True
+
+class ActividadUpdate(BaseModel):
+    descripcion_actividad: str
+
+class TareaOut(BaseModel):
+    id_tarea: UUID
+    nombre: str
+    detalle_descripcion: Optional[str]
+    cantidad: condecimal(max_digits=10, decimal_places=2)
+    precio_unitario: condecimal(max_digits=18, decimal_places=2)
+    total: condecimal(max_digits=18, decimal_places=2)
+    saldo_disponible: condecimal(max_digits=18, decimal_places=2)
+
+    class Config:
+        from_attributes = True
+
+class TareaUpdate(BaseModel):
+    cantidad: condecimal(gt=0)
+    precio_unitario: condecimal(gt=0)

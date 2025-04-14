@@ -1,8 +1,21 @@
 import uuid
 from app.database import SessionLocal
-from app.models import Rol, Permiso, PermisoRol, TipoPOA, TipoProyecto, EstadoProyecto, EstadoPOA, LimiteProyectosTipo
+from app.models import (
+    Rol, 
+    Permiso, 
+    PermisoRol, 
+    TipoPOA, 
+    TipoProyecto, 
+    EstadoProyecto, 
+    EstadoPOA, 
+    LimiteProyectosTipo,
+    ItemPresupuestario,
+    DetalleTarea,
+    TipoPoaDetalleTarea
+    )
 
 from sqlalchemy.future import select
+from sqlalchemy import and_
 
 # Esta función sirve para llenar la base de datos con datos iniciales
 async def seed_all_data():
@@ -229,3 +242,254 @@ async def seed_all_data():
             )
             db.add(limite)
             await db.commit()
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Insertar en ITEM_PRESUPUESTARIO (permitiendo duplicidad de código con distintas descripciones)
+    # ─────────────────────────────────────────────────────────────────────────────
+
+
+    items = [
+        {"codigo": "730606", "nombre": "Asistente de investigación", "descripcion": "Contratación de servicios profesionales"},
+        {"codigo": "710502", "nombre": "Ayudante de investigación - RMU", "descripcion": "Contratación de ayudantes de investigación RMU"},
+        {"codigo": "710601", "nombre": "Ayudante de investigación - IESS", "descripcion": "Contratación de ayudantes de investigación IESS"},
+        {"codigo": "840107", "nombre": "Equipo informático", "descripcion": "Adquisición de equipos informáticos"},
+        {"codigo": "840104", "nombre": "Equipo especializado / maquinaria", "descripcion": "Adquisición de equipos especializados y maquinaria"},
+        {"codigo": "730829", "nombre": "Insumos", "descripcion": "Adquisición de insumos"},
+        {"codigo": "730819", "nombre": "Reactivos", "descripcion": "Adquisición de reactivos"},
+        {"codigo": "730204", "nombre": "Publicaciones / impresión", "descripcion": "Pago de publicaciones o impresión 3D"},
+        {"codigo": "730612", "nombre": "Inscripción eventos", "descripcion": "Pago de inscripción para eventos académicos"},
+        {"codigo": "730303", "nombre": "Viáticos - interior", "descripcion": "Viáticos a nivel nacional"},
+        {"codigo": "730301", "nombre": "Pasajes interior", "descripcion": "Pasajes aéreos al interior"},
+        {"codigo": "730301", "nombre": "Movilización interior", "descripcion": "Movilización terrestre al interior"},
+        {"codigo": "730609", "nombre": "Laboratorios", "descripcion": "Análisis en laboratorios"},
+        {"codigo": "840109", "nombre": "Literatura", "descripcion": "Adquisición de literatura especializada"},
+        {"codigo": "730304", "nombre": "Viáticos - exterior", "descripcion": "Viáticos a nivel internacional"},
+        {"codigo": "730302", "nombre": "Pasajes exterior", "descripcion": "Pasajes aéreos al exterior"},
+        {"codigo": "730302", "nombre": "Movilización exterior", "descripcion": "Movilización terrestre al exterior"},
+        {"codigo": "730302", "nombre": "Pasajes para delegados", "descripcion": "Pasajes aéreos para atencion de delegados"},
+        {"codigo": "730307", "nombre": "Hospedaje delegados", "descripcion": "Hospedaje y alimentación para atención a delegados"},
+        {"codigo": "770102", "nombre": "Viáticos al interior", "descripcion": "Viáticos al interior"},
+        {"codigo": "730601", "nombre": "Servicios profesionales", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
+
+    ]
+
+    nuevos_items = []
+
+    for item in items:
+        result = await db.execute(
+            select(ItemPresupuestario).where(
+                and_(
+                    ItemPresupuestario.codigo == item["codigo"],
+                    ItemPresupuestario.descripcion == item["descripcion"]
+                )
+            )
+        )
+        existente = result.scalars().first()
+        if not existente:
+            nuevos_items.append(
+                ItemPresupuestario(
+                    id_item_presupuestario=uuid.uuid4(),
+                    codigo=item["codigo"],
+                    nombre=item["nombre"],
+                    descripcion=item["descripcion"]
+                )
+            )
+
+    if nuevos_items:
+        db.add_all(nuevos_items)
+        await db.commit()
+        print(f"Se insertaron {len(nuevos_items)} ítems presupuestarios nuevos.")
+    else:
+        print("Todos los ítems presupuestarios ya existen con su descripción.")
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Insertar DETALLE_TAREA asociados a los ITEM_PRESUPUESTARIO ya existentes
+    # ─────────────────────────────────────────────────────────────────────────────
+
+
+    detalles = [
+        {"codigo": "730606", "nombre": "Contratación de servicios profesionales", "descripcion": "Asistente de investigación"},
+        {"codigo": "710502", "nombre": "RMU 1", "descripcion": "Ayudante de investigación con RMU"},
+        {"codigo": "710601", "nombre": "IESS 1", "descripcion": "Ayudante de investigación con IESS"},
+        {"codigo": "840107", "nombre": "Equipos informáticos", "descripcion": "Compra de laptops y PCs"},
+        {"codigo": "840104", "nombre": "Equipos especializados", "descripcion": "Maquinaria y herramientas especializadas"},
+        {"codigo": "730829", "nombre": "Insumos varios", "descripcion": "Materiales consumibles"},
+        {"codigo": "730819", "nombre": "Reactivos químicos", "descripcion": "Reactivos de laboratorio"},
+        {"codigo": "730204", "nombre": "Pago publicaciones", "descripcion": "Gastos por publicación de artículos"},
+        {"codigo": "730612", "nombre": "Pago inscripción", "descripcion": "Inscripciones a congresos o eventos"},
+        {"codigo": "730303", "nombre": "Viáticos internos", "descripcion": "Viáticos dentro del país"},
+        {"codigo": "730301", "nombre": "Pasajes interiores", "descripcion": "Pasajes aéreos dentro del país"},
+        {"codigo": "730301", "nombre": "Movilización interna", "descripcion": "Transporte terrestre nacional"},
+        {"codigo": "730609", "nombre": "Análisis laboratorio", "descripcion": "Pruebas en laboratorios externos"},
+        {"codigo": "840109", "nombre": "Compra de libros", "descripcion": "Literatura técnica especializada"},
+        {"codigo": "730304", "nombre": "Viáticos al exterior", "descripcion": "Viáticos para viajes internacionales"},
+        {"codigo": "730302", "nombre": "Pasajes exteriores", "descripcion": "Pasajes aéreos internacionales"},
+        {"codigo": "730302", "nombre": "Movilización exterior", "descripcion": "Transporte terrestre internacional"},
+        {"codigo": "730302", "nombre": "Pasajes delegados", "descripcion": "Pasajes para investigadores externos"},
+        {"codigo": "730307", "nombre": "Hospedaje delegados", "descripcion": "Hospedaje y comida para delegados"},
+        {"codigo": "770102", "nombre": "Viáticos al interior", "descripcion": "Viáticos al interior"},
+        {"codigo": "730601", "nombre": "Servicios profesionales", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
+    ]
+
+    nuevos_detalles = []
+
+    for d in detalles:
+        # Buscar el ítem presupuestario asociado
+        result = await db.execute(
+            select(ItemPresupuestario).where(
+                and_(
+                    ItemPresupuestario.codigo == d["codigo"],
+                )
+            )
+        )
+        item = result.scalars().first()
+        if item:
+            # Verificar si ya existe el detalle
+            result = await db.execute(
+                select(DetalleTarea).where(
+                    and_(
+                        DetalleTarea.id_item_presupuestario == item.id_item_presupuestario,
+                        DetalleTarea.nombre == d["nombre"]
+                    )
+                )
+            )
+            existe = result.scalars().first()
+            if not existe:
+                nuevos_detalles.append(
+                    DetalleTarea(
+                        id_detalle_tarea=uuid.uuid4(),
+                        id_item_presupuestario=item.id_item_presupuestario,
+                        nombre=d["nombre"],
+                        descripcion=d["descripcion"],
+                        caracteristicas=None
+                    )
+                )
+
+    if nuevos_detalles:
+        db.add_all(nuevos_detalles)
+        await db.commit()
+        print(f"Se insertaron {len(nuevos_detalles)} DETALLE_TAREA.")
+    else:
+        print("Todos los DETALLE_TAREA ya existen.")
+
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Insertar relaciones TIPO_POA_DETALLE_TAREA
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    # Obtener el tipo POA por nombre -> PIM
+    result = await db.execute(select(TipoPOA).where(TipoPOA.codigo_tipo == "PIM"))
+    tipo_poa = result.scalars().first()
+    detalles_PIM = [
+        {"codigo": "730606", "nombre": "Contratación de servicios profesionales", "descripcion": "Asistente de investigación"},
+        {"codigo": "710502", "nombre": "RMU 1", "descripcion": "Ayudante de investigación con RMU"},
+        {"codigo": "710601", "nombre": "IESS 1", "descripcion": "Ayudante de investigación con IESS"},
+        {"codigo": "840107", "nombre": "Equipos informáticos", "descripcion": "Compra de laptops y PCs"},
+        {"codigo": "840104", "nombre": "Equipos especializados", "descripcion": "Maquinaria y herramientas especializadas"},
+        {"codigo": "730829", "nombre": "Insumos varios", "descripcion": "Materiales consumibles"},
+        {"codigo": "730819", "nombre": "Reactivos químicos", "descripcion": "Reactivos de laboratorio"},
+        {"codigo": "730204", "nombre": "Pago publicaciones", "descripcion": "Gastos por publicación de artículos"},
+        {"codigo": "730612", "nombre": "Pago inscripción", "descripcion": "Inscripciones a congresos o eventos"},
+        {"codigo": "730303", "nombre": "Viáticos internos", "descripcion": "Viáticos dentro del país"},
+        {"codigo": "730301", "nombre": "Pasajes interiores", "descripcion": "Pasajes aéreos dentro del país"},
+        {"codigo": "730301", "nombre": "Movilización interna", "descripcion": "Transporte terrestre nacional"},
+        {"codigo": "730609", "nombre": "Análisis laboratorio", "descripcion": "Pruebas en laboratorios externos"},
+        {"codigo": "840109", "nombre": "Compra de libros", "descripcion": "Literatura técnica especializada"},
+        {"codigo": "730304", "nombre": "Viáticos al exterior", "descripcion": "Viáticos para viajes internacionales"},
+        {"codigo": "730302", "nombre": "Pasajes exteriores", "descripcion": "Pasajes aéreos internacionales"},
+        {"codigo": "730302", "nombre": "Movilización exterior", "descripcion": "Transporte terrestre internacional"},
+        {"codigo": "730302", "nombre": "Pasajes delegados", "descripcion": "Pasajes para investigadores externos"},
+        {"codigo": "730601", "nombre": "Servicios profesionales", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
+        
+    ]
+    if tipo_poa:
+        nuevos = 0
+        for detalle in detalles_PIM:
+            result = await db.execute(
+                select(DetalleTarea)
+                .join(ItemPresupuestario)
+                .where(
+                    ItemPresupuestario.codigo == detalle["codigo"],
+                    DetalleTarea.nombre == detalle["nombre"]
+                )
+            )
+            detalle_obj = result.scalars().first()
+
+            if not detalle_obj:
+                print(f"No se encontró DetalleTarea con código {detalle['codigo']} y nombre {detalle['nombre']}")
+                continue
+
+            result = await db.execute(
+                select(TipoPoaDetalleTarea).where(
+                    TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
+                    TipoPoaDetalleTarea.id_detalle_tarea == detalle_obj.id_detalle_tarea
+                )
+            )
+            ya_existe = result.scalars().first()
+
+            if not ya_existe:
+                relacion = TipoPoaDetalleTarea(
+                    id_tipo_poa_detalle_tarea=uuid.uuid4(),
+                    id_tipo_poa=tipo_poa.id_tipo_poa,
+                    id_detalle_tarea=detalle_obj.id_detalle_tarea
+                )
+                db.add(relacion)
+                nuevos += 1
+
+        await db.commit()
+        print(f"Asociaciones nuevas: {nuevos}")
+    else:
+        print("No se encontró el TIPO_POA con código 'PIM'")
+
+    # Obtener el tipo POA por nombre -> PTT
+    result = await db.execute(select(TipoPOA).where(TipoPOA.codigo_tipo == "PTT"))
+    tipo_poa = result.scalars().first()
+    detalles_PTT = [
+        {"codigo": "730606", "nombre": "Contratación de servicios profesionales", "descripcion": "Asistente de investigación"},
+        {"codigo": "840104", "nombre": "Equipos especializados", "descripcion": "Maquinaria y herramientas especializadas"},
+        {"codigo": "730829", "nombre": "Insumos varios", "descripcion": "Materiales consumibles"},
+        {"codigo": "730204", "nombre": "Pago publicaciones", "descripcion": "Gastos por publicación de artículos"},
+        {"codigo": "730303", "nombre": "Viáticos internos", "descripcion": "Viáticos dentro del país"},
+        {"codigo": "730301", "nombre": "Pasajes interiores", "descripcion": "Pasajes aéreos dentro del país"},
+        {"codigo": "730301", "nombre": "Movilización interna", "descripcion": "Transporte terrestre nacional"},
+        {"codigo": "770102", "nombre": "Viáticos al interior", "descripcion": "Viáticos al interior"},
+        {"codigo": "730601", "nombre": "Servicios profesionales", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
+    ]
+    if tipo_poa:
+        nuevos = 0
+        for detalle in detalles_PTT:
+            result = await db.execute(
+                select(DetalleTarea)
+                .join(ItemPresupuestario)
+                .where(
+                    ItemPresupuestario.codigo == detalle["codigo"],
+                    DetalleTarea.nombre == detalle["nombre"]
+                )
+            )
+            detalle_obj = result.scalars().first()
+
+            if not detalle_obj:
+                print(f"No se encontró DetalleTarea con código {detalle['codigo']} y nombre {detalle['nombre']}")
+                continue
+
+            result = await db.execute(
+                select(TipoPoaDetalleTarea).where(
+                    TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
+                    TipoPoaDetalleTarea.id_detalle_tarea == detalle_obj.id_detalle_tarea
+                )
+            )
+            ya_existe = result.scalars().first()
+
+            if not ya_existe:
+                relacion = TipoPoaDetalleTarea(
+                    id_tipo_poa_detalle_tarea=uuid.uuid4(),
+                    id_tipo_poa=tipo_poa.id_tipo_poa,
+                    id_detalle_tarea=detalle_obj.id_detalle_tarea
+                )
+                db.add(relacion)
+                nuevos += 1
+
+        await db.commit()
+        print(f"Asociaciones nuevas: {nuevos}")
+    else:
+        print("No se encontró el TIPO_POA con código 'PIM'")
