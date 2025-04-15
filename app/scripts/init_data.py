@@ -155,7 +155,10 @@ async def seed_all_data():
             id_tipo_proyecto=uuid.uuid4(),
             codigo_tipo=poa.codigo_tipo,
             nombre=poa.nombre,
-            descripcion=poa.descripcion
+            descripcion=poa.descripcion,
+            duracion_meses=poa.duracion_meses,
+            cantidad_periodos=poa.cantidad_periodos,
+            presupuesto_maximo=poa.presupuesto_maximo,
         )
         for poa in tipos_poa_guardados if poa.codigo_tipo not in proyectos_existentes
     ]
