@@ -62,6 +62,7 @@ class ProyectoCreate(BaseModel):
     titulo: str
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
+    id_director_proyecto: Optional[str] = None
     fecha_creacion: datetime
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
@@ -69,11 +70,9 @@ class ProyectoCreate(BaseModel):
     fecha_prorroga_inicio: Optional[date] = None
     fecha_prorroga_fin: Optional[date] = None
     presupuesto_aprobado: Optional[Decimal] = None
-    director_proyecto:  str
 
 class ProyectoOut(ProyectoCreate):
     id_proyecto: UUID
-    id_director_proyecto: str
 
     class Config:
         from_attributes = True

@@ -382,7 +382,7 @@ async def crear_proyecto(
         titulo=data.titulo,
         id_tipo_proyecto=data.id_tipo_proyecto,
         id_estado_proyecto=data.id_estado_proyecto,
-        id_director_proyecto=data.director_proyecto,
+        id_director_proyecto=data.id_director_proyecto,
         fecha_creacion=data.fecha_creacion,
         fecha_inicio=data.fecha_inicio,
         fecha_fin=data.fecha_fin,
@@ -412,8 +412,8 @@ async def editar_proyecto(
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
     # Validar que el usuario sea el director del proyecto
-    if proyecto.id_director_proyecto != usuario.id_usuario:
-        raise HTTPException(status_code=403, detail="Solo el director del proyecto puede editarlo")
+    # if proyecto.id_director_proyecto != usuario.id_usuario:
+    #     raise HTTPException(status_code=403, detail="Solo el director del proyecto puede editarlo")
 
     # Validar tipo y estado
     tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
@@ -436,7 +436,7 @@ async def editar_proyecto(
     proyecto.fecha_prorroga_inicio = data.fecha_prorroga_inicio
     proyecto.fecha_prorroga_fin = data.fecha_prorroga_fin
     proyecto.presupuesto_aprobado = data.presupuesto_aprobado
-    proyecto.id_director_proyecto = data.director_proyecto
+    proyecto.id_director_proyecto = data.id_director_proyecto
 
     await db.commit()
     await db.refresh(proyecto)
