@@ -69,10 +69,11 @@ class ProyectoCreate(BaseModel):
     fecha_prorroga_inicio: Optional[date] = None
     fecha_prorroga_fin: Optional[date] = None
     presupuesto_aprobado: Optional[Decimal] = None
+    director_proyecto:  str
 
 class ProyectoOut(ProyectoCreate):
     id_proyecto: UUID
-    id_director_proyecto: UUID
+    id_director_proyecto: str
 
     class Config:
         from_attributes = True
@@ -91,6 +92,9 @@ class TipoProyectoOut(BaseModel):
     codigo_tipo: str
     nombre: str
     descripcion: str
+    duracion_meses: int
+    cantidad_periodos: int
+    presupuesto_maximo: Decimal
 
     class Config:
         from_attributes = True

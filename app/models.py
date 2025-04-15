@@ -27,7 +27,9 @@ class TipoProyecto(Base):
     codigo_tipo = Column(String(20), nullable=False)
     nombre = Column(String(50), nullable=False)
     descripcion = Column(String(500))
-
+    duracion_meses = Column(Integer, nullable=False)
+    cantidad_periodos = Column(Integer, nullable=False)
+    presupuesto_maximo = Column(DECIMAL(18, 2), nullable=False)
 class EstadoProyecto(Base):
     __tablename__ = "ESTADO_PROYECTO"
 
@@ -57,7 +59,6 @@ class Usuario(Base):
     activo = Column(Boolean, nullable=False, default=True)
 
     rol = relationship("Rol", back_populates="usuarios")
-    proyectos_dirigidos = relationship("Proyecto", back_populates="director", foreign_keys='Proyecto.id_director_proyecto')
 
 class Proyecto(Base):
     __tablename__ = "PROYECTO"
@@ -67,7 +68,7 @@ class Proyecto(Base):
     titulo = Column(String(200), nullable=False)
     id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
     id_estado_proyecto = Column(UUID(as_uuid=True), ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
-    id_director_proyecto = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"))
+    id_director_proyecto = Column(String(200), nullable=True)
     presupuesto_aprobado = Column(DECIMAL(18, 2))
     fecha_creacion = Column(DateTime, nullable=False)
     fecha_inicio = Column(Date)
@@ -78,7 +79,7 @@ class Proyecto(Base):
 
     tipo_proyecto = relationship("TipoProyecto")
     estado_proyecto = relationship("EstadoProyecto")
-    director = relationship("Usuario", back_populates="proyectos_dirigidos", foreign_keys=[id_director_proyecto])
+    # director = relationship("Usuario", back_populates="proyectos_dirigidos", foreign_keys=[id_director_proyecto])
 
 class Periodo(Base):
     __tablename__ = "PERIODO"
