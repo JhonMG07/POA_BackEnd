@@ -92,6 +92,8 @@ class Periodo(Base):
     anio = Column(String(4), nullable=True)
     mes = Column(String(15), nullable=True)
 
+    poas = relationship("PoaPeriodo", back_populates="periodo", cascade="all, delete-orphan")
+
 class EstadoPOA(Base):
     __tablename__ = "ESTADO_POA"
 
@@ -114,7 +116,7 @@ class Poa(Base):
 
     id_poa = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_proyecto = Column(UUID(as_uuid=True), ForeignKey("PROYECTO.id_proyecto"), nullable=False)
-    id_periodo = Column(UUID(as_uuid=True), ForeignKey("PERIODO.id_periodo"), nullable=False)
+    # id_periodo = Column(UUID(as_uuid=True), ForeignKey("PERIODO.id_periodo"), nullable=False)
     codigo_poa = Column(String(50), nullable=False)
     fecha_creacion = Column(DateTime, nullable=False)
     id_estado_poa = Column(UUID(as_uuid=True), ForeignKey("ESTADO_POA.id_estado_poa"), nullable=False)
@@ -123,9 +125,21 @@ class Poa(Base):
     presupuesto_asignado = Column(DECIMAL(18, 2), nullable=False)
 
     proyecto = relationship("Proyecto")
-    periodo = relationship("Periodo")
+    # periodo = relationship("Periodo")
     estado_poa = relationship("EstadoPOA")
+    periodos = relationship("PoaPeriodo", back_populates="poa", cascade="all, delete-orphan")
+
     tipo_poa = relationship("TipoPOA")
+
+class PoaPeriodo(Base):
+    __tablename__ = "POA_PERIODO"
+
+    id_poa_periodo = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
+    id_periodo = Column(UUID(as_uuid=True), ForeignKey("PERIODO.id_periodo"), nullable=False)
+
+    poa = relationship("Poa", back_populates="periodos")
+    periodo = relationship("Periodo", back_populates="poas")
 
 class ItemPresupuestario(Base):
     __tablename__ = "ITEM_PRESUPUESTARIO"

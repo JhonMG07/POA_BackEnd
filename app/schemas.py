@@ -41,12 +41,13 @@ class PeriodoOut(PeriodoCreate):
 
 class PoaCreate(BaseModel):
     id_proyecto: UUID
-    id_periodo: UUID
     codigo_poa: str
     fecha_creacion: datetime
     id_tipo_poa: UUID
+    id_estado_poa: Optional[UUID]
     anio_ejecucion: str
     presupuesto_asignado: Decimal
+    periodos: List[UUID]
 
 class PoaOut(PoaCreate):
     id_poa: UUID
