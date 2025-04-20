@@ -350,6 +350,20 @@ async def listar_tipos_poa(db: AsyncSession = Depends(get_db)):
 
     return result.scalars().all()
 
+@app.get("/tipos-poa/{id}", response_model=schemas.TipoPoaOut)
+async def obtener_tipo_poa(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == id))
+    tipo_poa = result.scalars().first()
+
+    if not tipo_poa:
+        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
+
+    return tipo_poa
+
 @app.post("/periodos/", response_model=schemas.PeriodoOut)
 async def crear_periodo(
     data: schemas.PeriodoCreate,
