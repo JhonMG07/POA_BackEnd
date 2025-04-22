@@ -152,7 +152,7 @@ async def seed_all_data():
 
     nuevos_proyectos = [
         TipoProyecto(
-            id_tipo_proyecto=uuid.uuid4(),
+            id_tipo_proyecto=poa.id_tipo_poa,
             codigo_tipo=poa.codigo_tipo,
             nombre=poa.nombre,
             descripcion=poa.descripcion,
