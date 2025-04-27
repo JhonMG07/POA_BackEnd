@@ -3,7 +3,6 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete
 from app import models, schemas, auth
 from app.database import engine, get_db
 from app.middlewares import add_middlewares
@@ -185,31 +184,25 @@ async def crear_poa(
     proyecto = result.scalars().first()
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-
+    # Validar que el periodo exista
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == data.id_periodo))
+    periodo = result.scalars().first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
     # Validar que el tipo POA exista
     result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
     tipo_poa = result.scalars().first()
     if not tipo_poa:
         raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
     
-    # Validar periodos y guardar objetos
-    periodos_validos = []
-    for id_periodo in data.periodos:
-        periodo = (await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == id_periodo))).scalars().first()
-        if not periodo:
-            raise HTTPException(status_code=404, detail=f"Periodo con id {id_periodo} no encontrado")
-        periodos_validos.append(periodo)
+    diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
+    duracion_meses = diferencia.months + diferencia.years * 12
 
-    # Validar duración del primer periodo
-    if periodos_validos:
-        primer_periodo = periodos_validos[0]
-        diferencia = relativedelta(primer_periodo.fecha_fin, primer_periodo.fecha_inicio)
-        duracion_meses = diferencia.months + diferencia.years * 12
-        if duracion_meses > tipo_poa.duracion_meses:
-            raise HTTPException(
-                status_code=400,
-                detail="El periodo excede la duración permitida por el tipo de POA"
-            )
+    if duracion_meses > tipo_poa.duracion_meses:
+        raise HTTPException(
+            status_code=400,
+            detail="El periodo excede la duración permitida por el tipo de POA"
+        )
 
     result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
     estado = result.scalars().first()
@@ -220,6 +213,7 @@ async def crear_poa(
     nuevo_poa = models.Poa(
         id_poa=uuid.uuid4(),
         id_proyecto=data.id_proyecto,
+        id_periodo=data.id_periodo,
         codigo_poa=data.codigo_poa,
         fecha_creacion=data.fecha_creacion,
         id_estado_poa=estado.id_estado_poa,
@@ -227,18 +221,7 @@ async def crear_poa(
         anio_ejecucion=data.anio_ejecucion,
         presupuesto_asignado=data.presupuesto_asignado
     )
-
     db.add(nuevo_poa)
-    await db.flush()  # Para obtener id_poa antes del commit
-
-    # Insertar relaciones en POA_PERIODO
-    for periodo in periodos_validos:
-        db.add(models.PoaPeriodo(
-            id_poa_periodo=uuid.uuid4(),
-            id_poa=nuevo_poa.id_poa,
-            id_periodo=periodo.id_periodo
-        ))
-
     await db.commit()
     await db.refresh(nuevo_poa)
 
@@ -259,59 +242,47 @@ async def editar_poa(
     if not poa:
         raise HTTPException(status_code=404, detail="POA no encontrado")
 
-    # Validar existencia del proyecto y tipo POA
-    for entity, field, name in [
-        (models.Proyecto, data.id_proyecto, "Proyecto"),
-        (models.TipoPOA, data.id_tipo_poa, "Tipo de POA"),
-    ]:
-        result = await db.execute(select(entity).where(entity.id == field))
-        if not result.scalars().first():
-            raise HTTPException(status_code=404, detail=f"{name} no encontrado")
+    # Verificar existencia del proyecto
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == data.id_proyecto))
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
-    # Validar existencia y duración de los periodos
-    duracion_total = 0
-    for id_periodo in data.id_periodos:
-        result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == id_periodo))
-        periodo = result.scalars().first()
-        if not periodo:
-            raise HTTPException(status_code=404, detail="Uno de los periodos no fue encontrado")
-
-        diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
-        duracion_total += diferencia.months + diferencia.years * 12
-
+    # Verificar existencia del periodo
+    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == data.id_periodo))
+    periodo = result.scalars().first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Periodo no encontrado")
     # Verificar existencia del tipo POA
     result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
     tipo_poa = result.scalars().first()
 
-    if duracion_total > tipo_poa.duracion_meses:
+    if not tipo_poa:
+        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
+
+    # Validar duración del periodo usando relativedelta
+    diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
+    duracion_meses = diferencia.months + diferencia.years * 12
+    if duracion_meses != tipo_poa.duracion_meses:
         raise HTTPException(
             status_code=400,
-            detail="La duración total de los periodos excede la del tipo de POA"
+            detail="La duración del periodo no coincide con el tipo de POA seleccionado"
         )
 
-    # Verificar que el estado exista
+    # Estado se mantiene igual que antes
     result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.id_estado_poa == data.id_estado_poa))
     estado = result.scalars().first()
     if not estado:
-        raise HTTPException(status_code=404, detail="Estado de POA no encontrado")
+        raise HTTPException(status_code=400, detail="Estado POA no encontrado")
 
-    # Actualizar campos del POA
+    # Actualizar el POA
     poa.id_proyecto = data.id_proyecto
+    poa.id_periodo = data.id_periodo
     poa.codigo_poa = data.codigo_poa
     poa.fecha_creacion = data.fecha_creacion
     poa.id_tipo_poa = data.id_tipo_poa
-    poa.id_estado_poa = data.id_estado_poa
+    poa.id_estado_poa = data.id_estado_poa  # o mantener el actual si no deseas sobreescribir
     poa.anio_ejecucion = data.anio_ejecucion
     poa.presupuesto_asignado = data.presupuesto_asignado
-
-    # Eliminar asociaciones anteriores y crear nuevas
-    await db.execute(delete(models.PoaPeriodo).where(models.PoaPeriodo.id_poa == id))
-    for id_periodo in data.id_periodos:
-        db.add(models.PoaPeriodo(
-            id_poa_periodo=uuid.uuid4(),
-            id_poa=id,
-            id_periodo=id_periodo
-        ))
 
     await db.commit()
     await db.refresh(poa)
