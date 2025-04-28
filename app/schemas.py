@@ -48,7 +48,7 @@ class PoaCreate(BaseModel):
     id_estado_poa: Optional[UUID]
     anio_ejecucion: str
     presupuesto_asignado: Decimal
-    periodos: List[UUID]
+
 
 class PoaOut(PoaCreate):
     id_poa: UUID
