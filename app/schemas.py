@@ -1,5 +1,5 @@
 from decimal import Decimal
-from pydantic import BaseModel, condecimal
+from pydantic import BaseModel, condecimal,constr
 from uuid import UUID
 from datetime import date, datetime
 from typing import Optional,List
@@ -204,3 +204,25 @@ class TareaOut(BaseModel):
 class TareaUpdate(BaseModel):
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
+
+
+#reformas
+class ReformaPoaBase(BaseModel):
+    id_poa: UUID
+    monto_solicitado: condecimal(gt=0)
+    justificacion: constr(min_length=10, max_length=500)
+
+class ReformaPoaCreate(ReformaPoaBase):
+    pass
+
+class ReformaPoaOut(ReformaPoaBase):
+    id_reforma: UUID
+    fecha_solicitud: datetime
+    fecha_aprobacion: Optional[datetime]
+    estado_reforma: str
+    monto_anterior: condecimal(gt=0)
+    id_usuario_solicita: UUID
+    id_usuario_aprueba: Optional[UUID]
+
+    class Config:
+        orm_mode = True
