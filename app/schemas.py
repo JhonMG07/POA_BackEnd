@@ -226,3 +226,41 @@ class ReformaPoaOut(ReformaPoaBase):
 
     class Config:
         orm_mode = True
+
+class TareaCreateReforma(BaseModel):
+    id_actividad: UUID
+    id_detalle_tarea: UUID
+    nombre: Optional[str]
+    detalle_descripcion: Optional[str]
+    cantidad: condecimal(gt=0)
+    precio_unitario: condecimal(gt=0)
+    justificacion: str
+
+class TareaEditReforma(BaseModel):
+    cantidad: Optional[condecimal(gt=0)]
+    precio_unitario: Optional[condecimal(gt=0)]
+    justificacion: str
+
+class HistoricoPoaOut(BaseModel):
+    campo_modificado: str
+    valor_anterior: Optional[str]
+    valor_nuevo: Optional[str]
+    justificacion: str
+    fecha_modificacion: datetime
+    usuario: str
+
+    class Config:
+        orm_mode = True
+
+
+class ReformaOut(BaseModel):
+    id_reforma: UUID
+    id_poa: UUID
+    fecha_solicitud: datetime
+    estado_reforma: str
+    monto_anterior: condecimal(gt=0)
+    monto_solicitado: condecimal(gt=0)
+    justificacion: str
+
+    class Config:
+        orm_mode = True
