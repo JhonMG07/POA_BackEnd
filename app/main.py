@@ -195,13 +195,19 @@ async def crear_poa(
     if not tipo_poa:
         raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
     
+    # Mejorar el cálculo de la duración del periodo para considerar días también
     diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
     duracion_meses = diferencia.months + diferencia.years * 12
 
+    # Si hay días adicionales, considerar como mes adicional si es más de la mitad del mes
+    if diferencia.days > 15:
+        duracion_meses += 1
+    
     if duracion_meses > tipo_poa.duracion_meses:
         raise HTTPException(
             status_code=400,
-            detail="El periodo excede la duración permitida por el tipo de POA"
+            detail=f"El periodo '{periodo.nombre_periodo}' tiene una duración de {duracion_meses} meses, " +
+                   f"pero el tipo de POA '{tipo_poa.nombre}' permite máximo {tipo_poa.duracion_meses} meses"
         )
 
     result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
