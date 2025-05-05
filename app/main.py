@@ -722,3 +722,236 @@ async def registrar_historial_poa(db, poa_id, usuario_id, campo, valor_anterior,
     )
     db.add(historial)
     await db.commit()
+
+
+#reformas
+@app.post("/poas/{id_poa}/reformas", response_model=schemas.ReformaPoaOut)
+async def crear_reforma_poa(
+    id_poa: uuid.UUID,
+    data: schemas.ReformaPoaCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar que el POA exista
+    result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id_poa))
+    poa = result.scalars().first()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    # Validar que el usuario solicitante exista
+    result = await db.execute(select(models.Usuario).where(models.Usuario.id_usuario == usuario.id_usuario))
+    if not result.scalars().first():
+        raise HTTPException(status_code=403, detail="Usuario solicitante no válido")
+
+    # Validar que el monto solicitado sea positivo
+    if data.monto_solicitado <= 0:
+        raise HTTPException(status_code=400, detail="El monto solicitado debe ser mayor a 0")
+
+    # Validar que haya diferencia de montos
+    if data.monto_solicitado == poa.presupuesto_asignado:
+        raise HTTPException(status_code=400, detail="El monto solicitado debe ser diferente al monto actual del POA")
+
+    reforma = models.ReformaPoa(
+        id_reforma=uuid.uuid4(),
+        id_poa=id_poa,
+        fecha_solicitud=datetime.utcnow(),
+        estado_reforma="Solicitada",
+        monto_anterior=poa.presupuesto_asignado,
+        monto_solicitado=data.monto_solicitado,
+        justificacion=data.justificacion,
+        id_usuario_solicita=usuario.id_usuario
+    )
+
+    db.add(reforma)
+    await db.commit()
+    await db.refresh(reforma)
+    return reforma
+
+
+@app.put("/reformas/{id_reforma}/tareas/{id_tarea}")
+async def editar_tarea_en_reforma(
+    id_reforma: uuid.UUID,
+    id_tarea: uuid.UUID,
+    data: schemas.TareaEditReforma,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    tarea = await db.get(models.Tarea, id_tarea)
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    reforma = await db.get(models.ReformaPoa, id_reforma)
+    if not reforma:
+        raise HTTPException(status_code=404, detail="Reforma no encontrada")
+
+    poa = await db.get(models.Poa, tarea.id_actividad)
+    if not poa or poa.id_poa != reforma.id_poa:
+        raise HTTPException(status_code=400, detail="Tarea no pertenece al POA de esta reforma")
+
+    tarea.cantidad = data.cantidad
+    tarea.precio_unitario = data.precio_unitario
+    tarea.total = data.cantidad * data.precio_unitario
+    tarea.saldo_disponible = tarea.total  # ajustar si hay lógica adicional
+
+    db.add(tarea)
+
+    db.add(models.HistoricoPoa(
+        id_historico=uuid.uuid4(),
+        id_poa=poa.id_poa,
+        id_usuario=usuario.id_usuario,
+        fecha_modificacion=datetime.now(),
+        campo_modificado="Tarea",
+        valor_anterior=f"Cantidad: {data.anterior_cantidad}, Precio: {data.anterior_precio}",
+        valor_nuevo=f"Cantidad: {data.cantidad}, Precio: {data.precio_unitario}",
+        justificacion=data.justificacion,
+        id_reforma=reforma.id_reforma
+    ))
+
+    await db.commit()
+    return {"msg": "Tarea actualizada correctamente"}
+
+
+@app.delete("/reformas/{id_reforma}/tareas/{id_tarea}")
+async def eliminar_tarea_en_reforma(
+    id_reforma: uuid.UUID,
+    id_tarea: uuid.UUID,
+    justificacion: str,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    tarea = await db.get(models.Tarea, id_tarea)
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    actividad = await db.get(models.Actividad, tarea.id_actividad)
+    poa = await db.get(models.Poa, actividad.id_poa)
+
+    if not poa or poa.id_poa != (await db.get(models.ReformaPoa, id_reforma)).id_poa:
+        raise HTTPException(status_code=400, detail="Tarea no corresponde a reforma")
+
+    await db.delete(tarea)
+
+    db.add(models.HistoricoPoa(
+        id_historico=uuid.uuid4(),
+        id_poa=poa.id_poa,
+        id_usuario=usuario.id_usuario,
+        fecha_modificacion=datetime.now(),
+        campo_modificado="Tarea eliminada",
+        valor_anterior=f"Tarea: {tarea.nombre} ({tarea.total})",
+        valor_nuevo="Eliminada",
+        justificacion=justificacion,
+        id_reforma=id_reforma
+    ))
+
+    await db.commit()
+    return {"msg": "Tarea eliminada correctamente"}
+
+
+@app.post("/reformas/{id_reforma}/actividades/{id_actividad}/tareas")
+async def agregar_tarea_en_reforma(
+    id_reforma: uuid.UUID,
+    id_actividad: uuid.UUID,
+    data: schemas.TareaCreateReforma,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    actividad = await db.get(models.Actividad, id_actividad)
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+
+    reforma = await db.get(models.ReformaPoa, id_reforma)
+    if not reforma:
+        raise HTTPException(status_code=404, detail="Reforma no encontrada")
+
+    poa = await db.get(models.Poa, actividad.id_poa)
+    if not poa or poa.id_poa != reforma.id_poa:
+        raise HTTPException(status_code=400, detail="Actividad no corresponde a reforma")
+
+    # Crear nueva tarea
+    total = data.cantidad * data.precio_unitario
+    nueva_tarea = models.Tarea(
+        id_tarea=uuid.uuid4(),
+        id_actividad=id_actividad,
+        id_detalle_tarea=data.id_detalle_tarea,
+        nombre=data.nombre,
+        detalle_descripcion=data.detalle_descripcion,
+        cantidad=data.cantidad,
+        precio_unitario=data.precio_unitario,
+        total=total,
+        saldo_disponible=total
+    )
+    db.add(nueva_tarea)
+
+    db.add(models.HistoricoPoa(
+        id_historico=uuid.uuid4(),
+        id_poa=poa.id_poa,
+        id_usuario=usuario.id_usuario,
+        fecha_modificacion=datetime.now(),
+        campo_modificado="Tarea nueva",
+        valor_anterior=None,
+        valor_nuevo=f"Tarea: {data.nombre} - Total: {total}",
+        justificacion=data.justificacion,
+        id_reforma=id_reforma
+    ))
+
+    await db.commit()
+    return {"msg": "Tarea agregada correctamente"}
+
+
+@app.get("/poas/{id_poa}/reformas", response_model=List[schemas.ReformaOut])
+async def listar_reformas_por_poa(
+    id_poa: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.ReformaPoa).where(models.ReformaPoa.id_poa == id_poa)
+    )
+    return result.scalars().all()
+
+
+@app.get("/reformas/{id_reforma}", response_model=schemas.ReformaOut)
+async def obtener_reforma(
+    id_reforma: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    reforma = await db.get(models.ReformaPoa, id_reforma)
+    if not reforma:
+        raise HTTPException(status_code=404, detail="Reforma no encontrada")
+    return reforma
+
+@app.post("/reformas/{id_reforma}/aprobar")
+async def aprobar_reforma(
+    id_reforma: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # # Validar rol (ejemplo: solo "Director de Investigación")
+    # rol = await db.get(models.Rol, usuario.id_rol)
+    # if rol.nombre_rol not in ["Director de Investigacion", "Administrador"]:
+    #     raise HTTPException(status_code=403, detail="No autorizado para aprobar reformas")
+
+    reforma = await db.get(models.ReformaPoa, id_reforma)
+    if not reforma:
+        raise HTTPException(status_code=404, detail="Reforma no encontrada")
+
+    reforma.estado_reforma = "Aprobada"
+    reforma.fecha_aprobacion = datetime.now()
+    reforma.id_usuario_aprueba = usuario.id_usuario
+
+    db.add(reforma)
+    await db.commit()
+
+    return {"msg": "Reforma aprobada exitosamente"}
+
+@app.get("/poas/{id_poa}/historial", response_model=List[schemas.HistoricoPoaOut])
+async def historial_poa(
+    id_poa: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.HistoricoPoa).where(models.HistoricoPoa.id_poa == id_poa).order_by(models.HistoricoPoa.fecha_modificacion.desc())
+    )
+    return result.scalars().all()
