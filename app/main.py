@@ -531,8 +531,8 @@ async def crear_actividades_para_poa(
             id_actividad=uuid.uuid4(),
             id_poa=id_poa,
             descripcion_actividad=act.descripcion_actividad,
-            total_por_actividad=0.00,
-            saldo_actividad=0.00,
+            total_por_actividad=act.total_por_actividad,
+            saldo_actividad=act.saldo_actividad,
         )
         for act in data.actividades
     ]
