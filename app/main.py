@@ -961,3 +961,21 @@ async def historial_poa(
         select(models.HistoricoPoa).where(models.HistoricoPoa.id_poa == id_poa).order_by(models.HistoricoPoa.fecha_modificacion.desc())
     )
     return result.scalars().all()
+
+
+@app.get("/proyectos/{id_proyecto}/poas", response_model=List[schemas.PoaOut])
+async def obtener_poas_por_proyecto(
+    id_proyecto: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar si el proyecto existe
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id_proyecto))
+    proyecto = result.scalars().first()
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Obtener los POAs asociados al proyecto
+    result = await db.execute(select(models.Poa).where(models.Poa.id_proyecto == id_proyecto))
+    poas = result.scalars().all()
+    return poas
