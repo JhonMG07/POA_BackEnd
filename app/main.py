@@ -1,5 +1,5 @@
 from datetime import datetime,timezone
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -12,6 +12,12 @@ from passlib.context import CryptContext
 import uuid
 from typing import List
 from dateutil.relativedelta import relativedelta
+import re
+from fastapi.responses import JSONResponse
+from app.scripts.transformador_excel import transformar_excel
+from app.utils import eliminar_tareas_y_actividades
+
+
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -979,3 +985,139 @@ async def obtener_poas_por_proyecto(
     result = await db.execute(select(models.Poa).where(models.Poa.id_proyecto == id_proyecto))
     poas = result.scalars().all()
     return poas
+
+@app.post("/transformar_excel/")
+async def transformar_archivo_excel(
+    file: UploadFile = File(...),
+    hoja: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    id_poa: uuid.UUID = Form(...),  # Recibir el ID del POA
+    confirmacion: bool = Form(False),  # Confirmación del frontend
+):
+    # Validar que el archivo tenga una extensión válida
+    if not file.filename.endswith((".xls", ".xlsx")):
+        raise HTTPException(status_code=400, detail="Archivo no soportado")
+
+    # Validar que el POA exista
+    result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id_poa))
+    poa = result.scalars().first()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+    
+    # Verificar si ya existen actividades asociadas al POA
+    result = await db.execute(select(models.Actividad).where(models.Actividad.id_poa == id_poa))
+    actividades_existentes = result.scalars().all()
+
+    # Leer el contenido del archivo
+    contenido = await file.read()
+    try:
+        json_result = transformar_excel(contenido, hoja)
+
+        if actividades_existentes:
+            if not confirmacion:
+                # Si no hay confirmación, enviar mensaje al frontend
+                return {
+                    "message": "El POA ya tiene actividades asociadas. ¿Deseas eliminarlas?",
+                    "requires_confirmation": True,
+                }
+
+            # Si hay confirmación, eliminar las tareas y actividades asociadas
+            await eliminar_tareas_y_actividades(id_poa,db)
+
+        # Lista para registrar errores
+        errores = []
+        # Crear actividades y tareas en la base de datos
+        for actividad in json_result["actividades"]:
+            # Crear la actividad
+            nueva_actividad = models.Actividad(
+                id_actividad=uuid.uuid4(),
+                id_poa=id_poa,
+                descripcion_actividad=actividad["descripcion_actividad"],
+                total_por_actividad=actividad["total_por_actividad"],
+                saldo_actividad=actividad["total_por_actividad"],  # Inicialmente igual al total
+            )
+            db.add(nueva_actividad)
+            await db.commit()
+            await db.refresh(nueva_actividad)
+
+            
+            # Crear las tareas asociadas a la actividad
+            for tarea in actividad["tareas"]:
+                # Extraer el prefijo numérico (si existe) y el resto del nombre
+                match = re.match(r"^(\d+\.\d+)\s+(.*)", tarea["nombre"])
+                if match:
+                    nombre_sin_prefijo = match.group(2)  # El nombre sin el prefijo (e.g., "Contratación de servicios profesionales")
+                else:
+                    nombre_sin_prefijo = tarea["nombre"]  # Si no hay prefijo, usar el nombre completo
+
+                # Buscar el id_item_presupuestario
+                result = await db.execute(
+                    select(models.ItemPresupuestario).where(
+                        models.ItemPresupuestario.codigo == tarea["item_presupuestario"]
+                        and models.ItemPresupuestario.descripcion == nombre_sin_prefijo
+                    )
+                )
+                items_presupuestarios = result.scalars().all()
+
+                if not items_presupuestarios:
+                    # Eliminar todo lo subido y lanzar excepción
+                    await eliminar_tareas_y_actividades(id_poa, db)
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró el item presupuestario con código '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
+                    )
+                
+                # Tomar el primer id_item_presupuestario encontrado
+                id_item_presupuestario = items_presupuestarios[0].id_item_presupuestario
+
+                # Buscar el id_detalle_tarea
+                result = await db.execute(
+                    select(models.DetalleTarea).where(
+                        models.DetalleTarea.id_item_presupuestario == id_item_presupuestario
+                    )
+                )
+                detalles_tarea = result.scalars().all()
+
+                if not detalles_tarea:
+                    # Eliminar todo lo subido y lanzar excepción
+                    await eliminar_tareas_y_actividades(id_poa, db)
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"No se guardo nada en la base de datos debido a que: \n No se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' en la tarea '{tarea['nombre']}'"
+                    )
+
+                # Tomar el primer id_detalle_tarea encontrado
+                id_detalle_tarea = detalles_tarea[0].id_detalle_tarea
+
+               # Crear la tarea
+                nueva_tarea = models.Tarea(
+                    id_tarea=uuid.uuid4(),
+                    id_actividad=nueva_actividad.id_actividad,
+                    id_detalle_tarea=id_detalle_tarea,
+                    nombre=tarea["nombre"],
+                    detalle_descripcion=tarea["detalle_descripcion"],
+                    cantidad=tarea["cantidad"],
+                    precio_unitario=tarea["precio_unitario"],
+                    total=tarea["total"],
+                    saldo_disponible=tarea["total"],  # Inicialmente igual al total
+                )
+                db.add(nueva_tarea)
+
+            # Confirmar las tareas después de agregarlas
+            await db.commit()
+        # Retornar el resultado
+        if errores:
+            return {
+                "message": "Actividades y tareas creadas con advertencias",
+                "errores": errores,
+            }
+        else:
+            return {"message": "Actividades y tareas creadas exitosamente"}
+    except ValueError as e:
+        # Capturar errores de formato y lanzar una excepción HTTP
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
