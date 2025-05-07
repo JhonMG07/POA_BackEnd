@@ -95,9 +95,14 @@ def transformar_excel(file_bytes: bytes, hoja: str):
 
             programacion = {}
             for idx, val in enumerate(fila[11:23]):
-                if pd.notna(val) and str(val).strip() != "" and es_numero(val):
-                    fecha = fecha_headers[idx]
-                    programacion[str(fecha)] = float(val)
+                if pd.notna(val) and str(val).strip() != "" :
+                    if es_numero(val):
+                        fecha = fecha_headers[idx]
+                        programacion[str(fecha)] = float(val)
+                    else:
+                        raise ValueError(f"No se guardo nada en la base de datos.\nError en la fila {i+1}: valor no válido en {chr(11 + idx + 65)}{i+1} (se esperaba un número).")
+
+                        
 
             programacion["suman"] = float(fila[23]) if pd.notna(fila[23]) else 0.0
 
