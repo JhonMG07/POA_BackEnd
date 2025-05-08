@@ -147,6 +147,7 @@ class PeriodoOut(PeriodoCreate):
 class ActividadCreate(BaseModel):
     descripcion_actividad: str
     total_por_actividad: Optional[condecimal(ge=0)] = 0.00
+    saldo_actividad: Optional[condecimal(ge=0)] = 0.00
 class ActividadesBatchCreate(BaseModel):
     actividades: List[ActividadCreate]
 
