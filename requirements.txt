@@ -9,3 +9,7 @@ passlib[bcrypt]
 python-dotenv
 python-multipart
 python-dateutil
+pandas
+openpyxl
+numpy
+datetime
