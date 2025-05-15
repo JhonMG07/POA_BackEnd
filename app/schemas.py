@@ -265,3 +265,12 @@ class ReformaOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+class ItemPresupuestarioOut(BaseModel):
+    id_item_presupuestario: UUID
+    codigo: str
+    nombre: str
+    descripcion: Optional[str]
+
+    class Config:
+        orm_mode = True

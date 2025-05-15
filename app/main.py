@@ -1121,3 +1121,16 @@ async def transformar_archivo_excel(
         raise HTTPException(status_code=500, detail=str(e))
     
     
+
+
+@app.get("/item-presupuestario/{id_item}", response_model=schemas.ItemPresupuestarioOut)
+async def get_item_presupuestario(
+    id_item: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    print(f"ID Item: {id_item}")
+    result = await db.execute(select(models.ItemPresupuestario).where(models.ItemPresupuestario.id_item_presupuestario == id_item))
+    item = result.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item presupuestario no encontrado")
+    return item
