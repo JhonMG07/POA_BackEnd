@@ -1,5 +1,5 @@
 from datetime import datetime,timezone
-from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -13,10 +13,18 @@ import uuid
 from typing import List
 from dateutil.relativedelta import relativedelta
 import re
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from app.scripts.transformador_excel import transformar_excel
 from app.utils import eliminar_tareas_y_actividades
+import io
+import pandas as pd
+import xlsxwriter
 
+from reportlab.lib.pagesizes import letter,landscape
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -1120,9 +1128,6 @@ async def transformar_archivo_excel(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-    
-
-
 @app.get("/item-presupuestario/{id_item}", response_model=schemas.ItemPresupuestarioOut)
 async def get_item_presupuestario(
     id_item: uuid.UUID,
@@ -1134,3 +1139,341 @@ async def get_item_presupuestario(
     if not item:
         raise HTTPException(status_code=404, detail="Item presupuestario no encontrado")
     return item
+  
+@app.post("/reporte-poa/")
+async def reporte_poa(
+    anio: str = Form(...),
+    tipo_proyecto: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    # se agrega el o los codigos de tipo de proyecto a una lista según el tipo de proyecto 
+    codigo_tipo: list[str] = []
+    if tipo_proyecto == "Investigacion":
+        codigo_tipo.append("PIIF")
+        codigo_tipo.append("PIS")
+        codigo_tipo.append("PIGR")
+        codigo_tipo.append("PIM")
+    elif tipo_proyecto == "Vinculacion":
+        codigo_tipo.append("PVIF")
+    elif tipo_proyecto == "Transferencia":
+        codigo_tipo.append("PTT")
+    else:
+        raise HTTPException(status_code=400, detail="Tipo de proyecto no válido")
+    
+    # 1. Buscar los tipos de proyecto según el código_tipo
+    result = await db.execute(
+        select(models.TipoProyecto)
+        .where(models.TipoProyecto.codigo_tipo.in_(codigo_tipo))
+    )
+
+    
+    tipos_proyecto = result.scalars().all()
+    ids_tipo_proyecto = [tp.id_tipo_proyecto for tp in tipos_proyecto]
+    print("ids_tipo_proyecto:", ids_tipo_proyecto)
+    # 2. Buscar proyectos de esos tipos
+    result = await db.execute(
+        select(models.Proyecto)
+        .where(models.Proyecto.id_tipo_proyecto.in_(ids_tipo_proyecto))
+    )
+    proyectos = result.scalars().all()
+    ids_proyecto = [p.id_proyecto for p in proyectos]
+
+    # 3. Buscar POAs de esos proyectos y año
+    result = await db.execute(
+        select(models.Poa)
+        .where(
+            models.Poa.id_proyecto.in_(ids_proyecto),
+            models.Poa.anio_ejecucion == anio
+        )
+    )
+    poas = result.scalars().all()
+    ids_poa = [poa.id_poa for poa in poas]
+
+    # 4. Buscar actividades de esos POAs (total_por_actividad > 0)
+    result = await db.execute(
+        select(models.Actividad)
+        .where(
+            models.Actividad.id_poa.in_(ids_poa),
+            models.Actividad.total_por_actividad > 0
+        )
+    )
+    actividades = result.scalars().all()
+    # Obtener los id_poa que tienen al menos una actividad válida
+    poas_con_actividades = set(act.id_poa for act in actividades)
+
+    # Filtrar la lista de poas para solo los que tienen actividades
+    poas_filtrados = [poa for poa in poas if poa.id_poa in poas_con_actividades]
+
+    # Agrupar actividades por descripcion_actividad
+    actividades_dict = {}
+    for act in actividades:
+        desc = act.descripcion_actividad
+        if desc not in actividades_dict:
+            actividades_dict[desc] = {
+                "descripcion_actividad": desc,
+                "total_por_actividad": 0,
+                "ids_actividad": [],
+                "tareas": []
+            }
+        actividades_dict[desc]["total_por_actividad"] += float(act.total_por_actividad)
+        actividades_dict[desc]["ids_actividad"].append(act.id_actividad)
+
+    # 5. Buscar tareas de esas actividades (total > 0)
+    ids_actividad = [id for acts in actividades_dict.values() for id in acts["ids_actividad"]]
+    result = await db.execute(
+        select(models.Tarea)
+        .where(
+            models.Tarea.id_actividad.in_(ids_actividad),
+            models.Tarea.total > 0
+        )
+    )
+    tareas = result.scalars().all()
+
+    # Agrupar tareas por id_detalle_tarea dentro de cada actividad
+    from collections import defaultdict
+    for desc, act in actividades_dict.items():
+        tareas_actividad = [t for t in tareas if t.id_actividad in act["ids_actividad"]]
+        tareas_grouped = defaultdict(lambda: {"cantidad": 0, "total": 0, "nombres": [], "id_detalle_tarea": None, "detalle_descripcion": None})
+        for tarea in tareas_actividad:
+            key = tarea.id_detalle_tarea
+            tareas_grouped[key]["cantidad"] += tarea.cantidad
+            tareas_grouped[key]["total"] += float(tarea.total)
+            tareas_grouped[key]["nombres"].append(tarea.nombre)
+            tareas_grouped[key]["id_detalle_tarea"] = tarea.id_detalle_tarea
+            tareas_grouped[key]["detalle_descripcion"] = tarea.detalle_descripcion
+
+        # Numerar las tareas agrupadas (1.1, 1.2, ...)
+        tareas_final = []
+        for idx, (id_detalle, datos) in enumerate(tareas_grouped.items(), start=1):
+            # Buscar el item presupuestario
+            result = await db.execute(
+                select(models.DetalleTarea).where(models.DetalleTarea.id_detalle_tarea == id_detalle)
+            )
+            detalle = result.scalars().first()
+            item_presupuestario = None
+            if detalle:
+                result = await db.execute(
+                    select(models.ItemPresupuestario).where(models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario)
+                )
+                item = result.scalars().first()
+                if item:
+                    item_presupuestario = item.codigo
+            # Limpiar el nombre original quitando cualquier prefijo tipo "1.3 ", "4.1 ", etc.
+            nombre_original = datos['nombres'][0]
+            nombre_limpio = re.sub(r"^\d+(\.\d+)?\s+", "", nombre_original).strip()
+            # Extraer el número de la actividad del texto, por ejemplo "(4) ..."
+            
+            match_num = re.match(r"\((\d+)\)", desc.strip())
+            if match_num:
+                num_actividad = match_num.group(1)
+            else:
+                num_actividad = str(list(actividades_dict.keys()).index(desc)+1)
+
+            nombre_tarea = f"{num_actividad}.{idx} {nombre_limpio}"
+
+            tareas_final.append({
+                "nombre": nombre_tarea,
+                "item_presupuestario": item_presupuestario,
+                "cantidad": datos["cantidad"],
+                "total": datos["total"],
+                
+            })
+        act["tareas"] = tareas_final
+
+    # Agrupar POAs por codigo_tipo SOLO usando poas_filtrados
+    poas_por_tipo = {}
+    for tp in tipos_proyecto:
+        poas_tp = [
+            poa for poa in poas_filtrados
+            if any(
+                p.id_proyecto == poa.id_proyecto and p.id_tipo_proyecto == tp.id_tipo_proyecto
+                for p in proyectos
+            )
+        ]
+        if poas_tp:
+            poas_por_tipo[tp.codigo_tipo] = {
+                "nombre": tp.nombre,
+                "cantidad_poas": len(poas_tp)
+            }
+
+    # Al final, antes de armar el JSON:
+    def extraer_numero_actividad(desc):
+        match = re.match(r"\((\d+)\)", desc.strip())
+        return int(match.group(1)) if match else 9999  # 9999 para los que no tengan número
+    # Eliminar 'ids_actividad' de cada actividad antes de devolver el JSON
+    for act in actividades_dict.values():
+        if "ids_actividad" in act:
+            del act["ids_actividad"]
+
+    actividades_ordenadas = sorted(
+        actividades_dict.values(),
+        key=lambda act: extraer_numero_actividad(act["descripcion_actividad"])
+    ) 
+    total_general = sum(act["total_por_actividad"] for act in actividades_ordenadas)
+    tipo_proyecto_legible = {
+        "Investigacion": "Proyecto de Investigación",
+        "Vinculacion": "Proyecto de Vinculación",
+        "Transferencia": "Proyecto de Transferencia"
+    }.get(tipo_proyecto, tipo_proyecto)
+    # Armar el JSON final
+    reporte = {
+        "anio": anio,
+        "tipo_proyecto": tipo_proyecto_legible,
+        "numero_poas": len(poas_filtrados), 
+        "total_general": total_general,
+        "tipos_proyecto_encontrados": [
+            {
+                "codigo_tipo": codigo,
+                "nombre": datos["nombre"],
+                "cantidad_poas": datos["cantidad_poas"]
+            }
+            for codigo, datos in poas_por_tipo.items()
+        ],
+        "actividades": actividades_ordenadas
+    }
+    return reporte
+
+
+@app.post("/reporte-poa/excel/")
+async def descargar_excel(
+    reporte: dict = Body(...)
+):
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Reporte POA")
+    worksheet.set_column(0, 0, 62.33)  # Columna A (Actividad o Tarea), ancho 40
+    worksheet.set_column(1, 1, 22)  # Columna B (Item Presupuestario), ancho 22
+    worksheet.set_column(2, 2, 13.50)  # Columna C (Cantidad), ancho 10
+    worksheet.set_column(3, 3, 9)  # Columna D (Total Tarea), ancho 15
+
+    # Formatos
+    bold = workbook.add_format({'bold': True,'align': 'center', 'valign': 'vcenter'})
+    header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1})
+    subheader = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
+    border = workbook.add_format({'border': 1})
+    bold_wrap = workbook.add_format({'bold': True, 'text_wrap': True,'align': 'center', 'valign': 'vcenter'})
+    
+    row = 0
+
+    # Encabezados generales
+    worksheet.write(row, 0, f"Año: {reporte['anio']}",bold)
+    row += 1
+    worksheet.write(row, 0, f"Tipo de Proyecto: {reporte['tipo_proyecto']}",bold)
+    row += 1
+    worksheet.write(row, 0, f"total de poas: {reporte['numero_poas']}",bold)
+    row += 1
+    worksheet.write(row, 0, f"total general: {round(reporte['total_general'],2)}",bold)
+    row += 2
+
+    # Tipos de proyecto encontrados
+    worksheet.merge_range(row, 0, row, 2, "tipos_proyecto_encontrados", bold)
+    row += 1
+    worksheet.write_row(row, 0, ["codigo_tipo", "nombre", "cantidad de poas"], header)
+    row += 1
+    for tipo in reporte["tipos_proyecto_encontrados"]:
+        worksheet.write_row(row, 0, [
+            tipo["codigo_tipo"],
+            tipo["nombre"],
+            tipo["cantidad_poas"]
+        ], border)
+        row += 1
+
+    row += 2
+
+    # Actividades y tareas
+    for actividad in reporte["actividades"]:
+        # Combina desde la columna 0 hasta la 3 (A-D)
+        worksheet.merge_range(row, 0, row, 3, f"Actividad: {actividad['descripcion_actividad']}", bold_wrap)
+        row += 1
+        worksheet.write_row(row, 0, ["Tarea", "Item Presupuestario", "Cantidad", "Total Tarea"], subheader)
+        row += 1
+        for tarea in actividad["tareas"]:
+            worksheet.write_row(row, 0, [
+                tarea["nombre"],
+                tarea["item_presupuestario"],
+                tarea["cantidad"],
+                tarea["total"]
+            ], border)
+            row += 1
+        row += 1  # Espacio entre actividades
+
+    workbook.close()
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=reporte-poa.xlsx"}
+    )
+
+@app.post("/reporte-poa/pdf/")
+async def descargar_pdf(
+    reporte: dict = Body(...)
+):
+    output = io.BytesIO()
+    custom_size = (600, 900)  # ancho x alto en puntos
+
+    doc = SimpleDocTemplate(output, pagesize=custom_size)
+    elements = []
+    styles = getSampleStyleSheet()
+    styleN = styles["Normal"]
+    styleH = styles["Heading2"]
+    style_cell = ParagraphStyle('cell', fontSize=9, leading=11)  # Puedes ajustar el tamaño
+
+    # Encabezados generales
+    elements.append(Paragraph(f"<b>Año:</b> {reporte['anio']}", styleN))
+    elements.append(Paragraph(f"<b>Tipo de Proyecto:</b> {reporte['tipo_proyecto']}", styleN))
+    elements.append(Paragraph(f"<b>Total de POAs:</b> {reporte['numero_poas']}", styleN))
+    elements.append(Paragraph(f"<b>Total general:</b> {round(reporte['total_general'],2)}", styleN))
+    elements.append(Spacer(1, 12))
+
+    # Tipos de proyecto encontrados
+    elements.append(Paragraph("Tipos de proyecto encontrados", styleH))
+    data = [["Código Tipo", "Nombre", "Cantidad de POAs"]]
+    for tipo in reporte["tipos_proyecto_encontrados"]:
+        data.append([tipo["codigo_tipo"], tipo["nombre"], tipo["cantidad_poas"]])
+    table = Table(data, hAlign='LEFT')
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold')
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 16))
+
+    # Actividades y tareas
+    for actividad in reporte["actividades"]:
+        elements.append(Paragraph(f"<b>Actividad: {actividad['descripcion_actividad']}</b>", styleN))
+        data = [
+            [
+                Paragraph("<b>Tarea</b>", style_cell),
+                Paragraph("<b>Item Presupuestario</b>", style_cell),
+                Paragraph("<b>Cantidad</b>", style_cell),
+                Paragraph("<b>Total Tarea</b>", style_cell)
+            ]
+        ]
+        for tarea in actividad["tareas"]:
+            data.append([
+                Paragraph(str(tarea["nombre"]), style_cell),
+                Paragraph(str(tarea["item_presupuestario"]), style_cell),
+                Paragraph(str(tarea["cantidad"]), style_cell),
+                Paragraph(str(tarea["total"]), style_cell)
+            ])
+        table = Table(data, hAlign='LEFT', colWidths=[180, 80, 60, 60])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+
+    doc.build(elements)
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=reporte-poa.pdf"}
+    )
