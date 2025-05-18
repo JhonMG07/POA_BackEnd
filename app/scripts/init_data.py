@@ -250,29 +250,34 @@ async def seed_all_data():
     # Insertar en ITEM_PRESUPUESTARIO (permitiendo duplicidad de código con distintas descripciones)
     # ─────────────────────────────────────────────────────────────────────────────
 
-
+    # Verificar que todos los ítems presupuestarios tengan asignada una tarea
+    # nombre: PIM; PTT; PVIF (resto de POA's)
     items = [
-        {"codigo": "730606", "nombre": "Asistente de investigación", "descripcion": "Contratación de servicios profesionales"},
-        {"codigo": "710502", "nombre": "Ayudante de investigación - RMU", "descripcion": "Contratación de ayudantes de investigación RMU"},
-        {"codigo": "710601", "nombre": "Ayudante de investigación - IESS", "descripcion": "Contratación de ayudantes de investigación IESS"},
-        {"codigo": "840107", "nombre": "Equipo informático", "descripcion": "Adquisición de equipos informáticos"},
-        {"codigo": "840104", "nombre": "Equipo especializado / maquinaria", "descripcion": "Adquisición de equipos especializados y maquinaria"},
-        {"codigo": "730829", "nombre": "Insumos", "descripcion": "Adquisición de insumos"},
-        {"codigo": "730819", "nombre": "Reactivos", "descripcion": "Adquisición de reactivos"},
-        {"codigo": "730204", "nombre": "Publicaciones / impresión", "descripcion": "Pago de publicaciones o impresión 3D"},
-        {"codigo": "730612", "nombre": "Inscripción eventos", "descripcion": "Pago de inscripción para eventos académicos"},
-        {"codigo": "730303", "nombre": "Viáticos - interior", "descripcion": "Viáticos a nivel nacional"},
-        {"codigo": "730301", "nombre": "Pasajes interior", "descripcion": "Pasajes aéreos al interior"},
-        {"codigo": "730301", "nombre": "Movilización interior", "descripcion": "Movilización terrestre al interior"},
-        {"codigo": "730609", "nombre": "Laboratorios", "descripcion": "Análisis en laboratorios"},
-        {"codigo": "840109", "nombre": "Literatura", "descripcion": "Adquisición de literatura especializada"},
-        {"codigo": "730304", "nombre": "Viáticos - exterior", "descripcion": "Viáticos a nivel internacional"},
-        {"codigo": "730302", "nombre": "Pasajes exterior", "descripcion": "Pasajes aéreos al exterior"},
-        {"codigo": "730302", "nombre": "Movilización exterior", "descripcion": "Movilización terrestre al exterior"},
-        {"codigo": "730302", "nombre": "Pasajes para delegados", "descripcion": "Pasajes aéreos para atencion de delegados"},
-        {"codigo": "730307", "nombre": "Hospedaje delegados", "descripcion": "Hospedaje y alimentación para atención a delegados"},
-        {"codigo": "770102", "nombre": "Viáticos al interior", "descripcion": "Viáticos al interior"},
-        {"codigo": "730601", "nombre": "Servicios profesionales", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
+        {"codigo": "730606", "nombre": "1.1; 1.1; 1.1", "descripcion": "Codigo único"},
+        {"codigo": "710502", "nombre": "2.1; 0; 2.1", "descripcion": "Codigo único"},
+        {"codigo": "710601", "nombre": "2.2; 0; 2.2", "descripcion": "Codigo único"},
+        {"codigo": "840107", "nombre": "3.1; 7.1; 3.1", "descripcion": "Depende de una condición"},
+        {"codigo": "731407", "nombre": "3.1; 7.1; 3.1", "descripcion": "Depende de una condición"},
+        {"codigo": "840104", "nombre": "4.1; 2.1; 4.1", "descripcion": "Depende de una condición"},
+        {"codigo": "731404", "nombre": "4.1; 2.1; 4.1", "descripcion": "Depende de una condición"},
+        {"codigo": "730829", "nombre": "5.1; 3.1; 5.1", "descripcion": "Codigo único"},
+        {"codigo": "730819", "nombre": "5.2; 0; 5.2", "descripcion": "Codigo único"},
+        {"codigo": "730204", "nombre": "6.1; 4.1; 6.1", "descripcion": "Codigo único"},
+        {"codigo": "730612", "nombre": "7.1; 0; 7.1", "descripcion": "Codigo único"},
+        {"codigo": "730303", "nombre": "8.1; 5.1; 8.1", "descripcion": "Codigo único"},
+        {"codigo": "730301", "nombre": "8.2; 5.2; 8.2", "descripcion": "Aplica en 2 tareas"},
+        {"codigo": "730301", "nombre": "8.3; 5.3; 8.3", "descripcion": "Aplica en 2 tareas"},
+        {"codigo": "730609", "nombre": "9.1; 0; 0", "descripcion": "Codigo único"},
+        {"codigo": "840109", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
+        {"codigo": "731409", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
+        {"codigo": "730304", "nombre": "11.1; 0; 0", "descripcion": "Codigo único"},
+        {"codigo": "730302", "nombre": "11.2; 0; 0", "descripcion": "Aplica en 3 tareas"},
+        {"codigo": "730302", "nombre": "11.3; 0; 0", "descripcion": "Aplica en 3 tareas"},
+        {"codigo": "730302", "nombre": "12.1; 0; 0", "descripcion": "Aplica en 3 tareas"},
+        {"codigo": "730307", "nombre": "12.2; 0; 0", "descripcion": "Codigo único"},
+        {"codigo": "770102", "nombre": "0; 8.1; 0", "descripcion": "Codigo único"},
+        {"codigo": "730601", "nombre": "0; 6.1; 0", "descripcion": "Codigo único"},
+        {"codigo": "730207", "nombre": "0; 0; 6.2", "descripcion": "Codigo único"},
 
     ]
 
