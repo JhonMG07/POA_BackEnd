@@ -203,6 +203,17 @@ async def crear_poa(
     periodo = result.scalars().first()
     if not periodo:
         raise HTTPException(status_code=404, detail="Periodo no encontrado")
+     # Verificar si ya existe un POA con ese periodo
+    result = await db.execute(
+        select(models.Poa).where(models.Poa.id_periodo == data.id_periodo)
+    )
+    poa_existente = result.scalars().first()
+    if poa_existente:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe un POA asignado al periodo '{periodo.nombre_periodo}'"
+        )
+    
     # Validar que el tipo POA exista
     result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
     tipo_poa = result.scalars().first()
@@ -272,6 +283,19 @@ async def editar_poa(
     periodo = result.scalars().first()
     if not periodo:
         raise HTTPException(status_code=404, detail="Periodo no encontrado")
+     # Verificar si el nuevo periodo ya está ocupado por otro POA
+    if poa.id_periodo != data.id_periodo:
+        result = await db.execute(
+            select(models.Poa)
+            .where(models.Poa.id_periodo == data.id_periodo, models.Poa.id_poa != poa.id_poa)
+        )
+        otro_poa = result.scalars().first()
+        if otro_poa:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ya existe un POA asignado al periodo '{periodo.nombre_periodo}'"
+            )
+   
     # Verificar existencia del tipo POA
     result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
     tipo_poa = result.scalars().first()
