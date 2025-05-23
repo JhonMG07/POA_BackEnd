@@ -1501,3 +1501,57 @@ async def descargar_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=reporte-poa.pdf"}
     )
+
+# programacion mensual
+
+@app.post("/programacion-mensual", response_model=schemas.ProgramacionMensualOut)
+async def crear_programacion_mensual(
+    data: schemas.ProgramacionMensualCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    nueva = models.ProgramacionMensual(**data.dict())
+    db.add(nueva)
+    try:
+        await db.commit()
+        await db.refresh(nueva)
+        return nueva
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Ya existe programación para ese mes y tarea.")
+
+@app.put("/programacion-mensual/{id_programacion}", response_model=schemas.ProgramacionMensualOut)
+async def actualizar_programacion_mensual(
+    id_programacion: uuid.UUID,
+    data: schemas.ProgramacionMensualUpdate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_programacion == id_programacion)
+    )
+    programacion = result.scalars().first()
+    if not programacion:
+        raise HTTPException(status_code=404, detail="Programación no encontrada")
+
+    programacion.valor = data.valor
+    await db.commit()
+    await db.refresh(programacion)
+    return programacion
+
+@app.get("/tareas/{id_tarea}/programacion-mensual", response_model=List[schemas.ProgramacionMensualOut])
+async def obtener_programacion_por_tarea(
+    id_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    # Verificar que la tarea exista
+    result = await db.execute(select(models.Tarea).where(models.Tarea.id_tarea == id_tarea))
+    tarea = result.scalars().first()
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    result = await db.execute(
+        select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_tarea == id_tarea)
+    )
+    return result.scalars().all()

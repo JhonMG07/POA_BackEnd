@@ -274,3 +274,20 @@ class ItemPresupuestarioOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+class ProgramacionMensualBase(BaseModel):
+    mes: constr(regex=r"^\d{2}-\d{4}$")  # Formato MM-AAAA
+    valor: Decimal
+
+class ProgramacionMensualCreate(ProgramacionMensualBase):
+    id_tarea: UUID
+
+class ProgramacionMensualUpdate(BaseModel):
+    valor: Decimal
+
+class ProgramacionMensualOut(ProgramacionMensualBase):
+    id_programacion: UUID
+    id_tarea: UUID
+
+    class Config:
+        orm_mode = True

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -197,6 +197,23 @@ class Tarea(Base):
 
     actividad = relationship("Actividad", back_populates="tareas")
     detalle_tarea = relationship("DetalleTarea")
+    programacion_mensual = relationship("ProgramacionMensual", back_populates="tarea", cascade="all, delete-orphan")
+
+
+class ProgramacionMensual(Base):
+    __tablename__ = "PROGRAMACION_MENSUAL"
+
+    id_programacion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tarea = Column(UUID(as_uuid=True), ForeignKey("TAREA.id_tarea"), nullable=False)
+    mes = Column(String(7), nullable=False)  # Formato: '01-2026', '02-2026', etc.
+    valor = Column(DECIMAL(18, 2), nullable=False)
+
+    tarea = relationship("Tarea", back_populates="programacion_mensual")
+
+    __table_args__ = (
+        UniqueConstraint('id_tarea', 'mes', name='uq_tarea_mes'),
+    )
+
 
 class Permiso(Base):
     __tablename__ = "PERMISO"
