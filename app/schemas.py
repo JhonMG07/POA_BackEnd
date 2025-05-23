@@ -174,6 +174,7 @@ class DetalleTareaOut(BaseModel):
     id_detalle_tarea: UUID
     nombre: str
     descripcion: Optional[str]
+    id_item_presupuestario: Optional[UUID]  # Nuevo campo agregado
 
     class Config:
         from_attributes = True
