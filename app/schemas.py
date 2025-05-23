@@ -1,8 +1,8 @@
 from decimal import Decimal
-from pydantic import BaseModel, condecimal,constr
+from pydantic import BaseModel, condecimal,constr,Field
 from uuid import UUID
 from datetime import date, datetime
-from typing import Optional,List
+from typing import Optional,List,Annotated
 
 class Token(BaseModel):
     access_token: str
@@ -276,7 +276,7 @@ class ItemPresupuestarioOut(BaseModel):
         orm_mode = True
 
 class ProgramacionMensualBase(BaseModel):
-    mes: constr(regex=r"^\d{2}-\d{4}$")  # Formato MM-AAAA
+    mes: Annotated[str, Field(pattern=r"^\d{2}-\d{4}$")]  # Formato MM-AAAA
     valor: Decimal
 
 class ProgramacionMensualCreate(ProgramacionMensualBase):
