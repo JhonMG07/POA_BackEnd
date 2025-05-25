@@ -343,22 +343,27 @@ async def seed_all_data():
         {"codigo": "730207", "nombre": "Servicio de difusion informacion y publicidad (banner, plotter, pancarta, afiches)", "descripcion": "Elaboración de diseño y seguimiento de prototipos"},
     ]
 
+    item_presupuestarios_utilizados = set()
     nuevos_detalles = []
-
     for d in detalles:
-        # Buscar solo el primer ítem presupuestario con ese código
+        # Buscar todos los ítems presupuestarios con ese código
         result = await db.execute(
-            select(ItemPresupuestario)
-            .where(ItemPresupuestario.codigo == d["codigo"])
-            .limit(1)
+            select(ItemPresupuestario).where(ItemPresupuestario.codigo == d["codigo"])
         )
-        item = result.scalars().first()
+        items_con_codigo = result.scalars().all()
+
+        # Buscar el primero que no haya sido usado aún
+        item = None
+        for candidate in items_con_codigo:
+            if candidate.id_item_presupuestario not in item_presupuestarios_utilizados:
+                item = candidate
+                break
 
         if not item:
-            print(f"❌ No se encontró ningún ItemPresupuestario con código {d['codigo']}")
+            print(f"❌ Todos los ítems con código={d['codigo']} ya fueron utilizados.")
             continue
 
-        # Verificar si ya existe el detalle con ese nombre para ese ítem
+        # Verificar si ya existe el detalle exacto
         result = await db.execute(
             select(DetalleTarea).where(
                 DetalleTarea.id_item_presupuestario == item.id_item_presupuestario,
@@ -377,6 +382,8 @@ async def seed_all_data():
                     caracteristicas=None
                 )
             )
+            item_presupuestarios_utilizados.add(item.id_item_presupuestario)
+
 
     if nuevos_detalles:
         db.add_all(nuevos_detalles)
