@@ -265,20 +265,16 @@ async def seed_all_data():
         {"codigo": "730204", "nombre": "6.1; 4.1; 6.1", "descripcion": "Codigo único"},
         {"codigo": "730612", "nombre": "7.1; 0; 7.1", "descripcion": "Codigo único"},
         {"codigo": "730303", "nombre": "8.1; 5.1; 8.1", "descripcion": "Codigo único"},
-        {"codigo": "730301", "nombre": "8.2; 5.2; 8.2", "descripcion": "Aplica en 2 tareas"},
-        {"codigo": "730301", "nombre": "8.3; 5.3; 8.3", "descripcion": "Aplica en 2 tareas"},
+        {"codigo": "730301", "nombre": "(8.2 8.3); 5.2; 8.2", "descripcion": "Aplica en 2 tareas del mismo POA"},
         {"codigo": "730609", "nombre": "9.1; 0; 0", "descripcion": "Codigo único"},
         {"codigo": "840109", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
         {"codigo": "731409", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
         {"codigo": "730304", "nombre": "11.1; 0; 0", "descripcion": "Codigo único"},
-        {"codigo": "730302", "nombre": "11.2; 0; 0", "descripcion": "Aplica en 3 tareas"},
-        {"codigo": "730302", "nombre": "11.3; 0; 0", "descripcion": "Aplica en 3 tareas"},
-        {"codigo": "730302", "nombre": "12.1; 0; 0", "descripcion": "Aplica en 3 tareas"},
+        {"codigo": "730302", "nombre": "(11.2 11.3 12.1); 0; 0", "descripcion": "Aplica en 3 tareas del mismo POA"},
         {"codigo": "730307", "nombre": "12.2; 0; 0", "descripcion": "Codigo único"},
         {"codigo": "770102", "nombre": "0; 8.1; 0", "descripcion": "Codigo único"},
         {"codigo": "730601", "nombre": "0; 6.1; 0", "descripcion": "Codigo único"},
         {"codigo": "730207", "nombre": "0; 0; 6.2", "descripcion": "Codigo único"},
-
     ]
 
     nuevos_items = []
@@ -314,183 +310,287 @@ async def seed_all_data():
     # Insertar DETALLE_TAREA asociados a los ITEM_PRESUPUESTARIO ya existentes
     # ─────────────────────────────────────────────────────────────────────────────
 
-
     detalles = [
-        {"codigo": "730606", "nombre": "Contratación de servicios profesionales", "descripcion": "Asistente de investigación"},
-        {"codigo": "710502", "nombre": "RMU 1", "descripcion": "Ayudante de investigación con RMU"},
-        {"codigo": "710601", "nombre": "IESS 1", "descripcion": "Ayudante de investigación con IESS"},
-        {"codigo": "840107", "nombre": "Adquisicion de equipos informáticos", "descripcion": "Compra de laptops y PCs"},
-        {"codigo": "840104", "nombre": "Adquisicion de equipos especializados", "descripcion": "Maquinaria y herramientas especializadas"},
-        {"codigo": "730829", "nombre": "Adquisición de insumos", "descripcion": "Materiales consumibles"},
-        {"codigo": "730819", "nombre": "Adquisición de reactivos", "descripcion": "Reactivos de laboratorio"},
-        {"codigo": "730204", "nombre": "Solicitud de autorización para el pago de publicaciones", "descripcion": "Gastos por publicación de artículos"},
-        {"codigo": "730612", "nombre": "Solicitud de pago de inscripción para participación en eventos académicos", "descripcion": "Inscripciones a congresos o eventos"},
-        {"codigo": "730303", "nombre": "Viáticos internos", "descripcion": "Viáticos dentro del país"},
-        {"codigo": "730301", "nombre": "Pasajes aéreos interiores", "descripcion": "Pasajes aéreos dentro del país"},
-        {"codigo": "730301", "nombre": "Movilización al interior", "descripcion": "Transporte terrestre nacional"},
-        {"codigo": "730609", "nombre": "Análisis laboratorio", "descripcion": "Pruebas en laboratorios externos"},
-        {"codigo": "840109", "nombre": "Adquisición de literatura especializada", "descripcion": "Literatura técnica especializada"},
-        {"codigo": "730304", "nombre": "Viáticos al exterior", "descripcion": "Viáticos para viajes internacionales"},
-        {"codigo": "730302", "nombre": "Pasajes aéreos exteriores", "descripcion": "Pasajes aéreos internacionales"},
-        {"codigo": "730302", "nombre": "Movilización al exterior", "descripcion": "Transporte terrestre internacional"},
-        {"codigo": "730302", "nombre": "Pasajes aéreos para atención a delegados (investigadores colaboradores externos)", "descripcion": "Pasajes para investigadores externos"},
-        {"codigo": "730307", "nombre": "Servicio de hospedaje y alimentación para atención a delegados (investigadores colaboradores externos)", "descripcion": "Hospedaje y comida para delegados"},
-        {"codigo": "770102", "nombre": "Viáticos al interior", "descripcion": "Viáticos al interior"},
-        {"codigo": "730601", "nombre": "Contratación de servicios técnicos especializados para la elaboración de diseño, construcción, implementación, seguimiento y mejora contínua de los prototipos", "descripcion": "Contratación de servicios profesionales para la elaboracion de diseño, construccion, implementacion, seguimiento y mejora continua de prototipos"},
-        {"codigo": "731407", "nombre": "Adquisicion de equipos informáticos", "descripcion": "Compra de laptops y PCs"},
-        {"codigo": "731404", "nombre": "Adquisicion de equipos especializados", "descripcion": "Maquinaria y herramientas especializadas"},
-        {"codigo": "731409", "nombre": "Adquisición de literatura especializada ", "descripcion": "Literatura técnica especializada"},
-        {"codigo": "730207", "nombre": "Servicio de difusion informacion y publicidad (banner, plotter, pancarta, afiches)", "descripcion": "Elaboración de diseño y seguimiento de prototipos"},
+        # Detalles para PIM
+        {
+            "codigo": "730606",
+            "nombre": "Contratación de servicios profesionales",
+            "descripcion": "Asistente de investigación (ejemplo)",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "710502",
+            "nombre": "Contratación de ayudantes de investigación RMU",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "710601",
+            "nombre": "Contratación de ayudantes de investigación IESS",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        # Casos #ojo - equipos informáticos (dos códigos alternativos)
+        {
+            "codigo": "840107",
+            "nombre": "Adquisición de equipos informáticos",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT"]
+        },
+        {
+            "codigo": "731407",
+            "nombre": "Adquisición de equipos informáticos", 
+            "descripcion": "",
+            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        # Casos #ojo - equipos especializados (dos códigos alternativos)
+        {
+            "codigo": "840104",
+            "nombre": "Adquisición de equipos especializados y maquinaria",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT"]
+        },
+        {
+            "codigo": "731404",
+            "nombre": "Adquisición de equipos especializados y maquinaria",
+            "descripcion": "",
+            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730829",
+            "nombre": "Adquisición de insumos",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730819",
+            "nombre": "Adquisición de reactivos",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730204",
+            "nombre": "Solicitud de autorización para el pago de publicaciones",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730612",
+            "nombre": "Solicitud de pago de inscripción para participación en eventos académicos",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730303",
+            "nombre": "Viáticos al interior",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730301",
+            "nombre": "Pasajes aéreos al interior",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730301",
+            "nombre": "Movilización al interior",
+            "descripcion": "",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730609",
+            "nombre": "Análisis de laboratorios",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        # Casos #ojo - literatura especializada
+        {
+            "codigo": "840109",
+            "nombre": "Adquisición de literatura especializada",
+            "descripcion": "(valor mas de 100 y durabilidad)",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "731409",
+            "nombre": "Adquisición de literatura especializada",
+            "descripcion": "(valor mas de 100 y durabilidad)",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730304",
+            "nombre": "Viáticos al exterior",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730302",
+            "nombre": "Pasajes aéreos al exterior",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730302",
+            "nombre": "Movilización al exterior",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730302",
+            "nombre": "Pasajes aéreos para atención a delegados (investigadores colaboradores externos)",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        {
+            "codigo": "730307",
+            "nombre": "Servicio de hospedaje y alimentación para atención a delegados (investigadores colaboradores externos)",
+            "descripcion": "",
+            "tipos_poa": ["PIM"]
+        },
+        # Detalles específicos para PTT
+        {
+            "codigo": "730204",
+            "nombre": "Servicio de edición, impresión y reproducción (Impresión 3D)",
+            "descripcion": "",
+            "tipos_poa": ["PTT"]
+        },
+        {
+            "codigo": "730601",
+            "nombre": "Contratación de servicios técnicos especializados para la elaboración de diseño, construcción, implementación, seguimiento y mejora contínua de los prototipos",
+            "descripcion": "Contratación de servicios técnicos especializados (Consultoría), para la adquisición de muestras de campo",
+            "tipos_poa": ["PTT"]
+        },
+        {
+            "codigo": "770102",
+            "nombre": "Viáticos al interior",
+            "descripcion": "",
+            "tipos_poa": ["PTT"]
+        },
+        # Detalles específicos para PVIF, PVIS, PIGR, PIS, PIIF
+        {
+            "codigo": "730204",
+            "nombre": "Servicio de edición, impresión y reproducción (copias)",
+            "descripcion": "",
+            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730207",
+            "nombre": "Servicio de difusion informacion y publicidad (banner, plotter, pancarta, afiches)",
+            "descripcion": "",
+            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
     ]
 
-    item_presupuestarios_utilizados = set()
-    nuevos_detalles = []
-    for d in detalles:
-        # Buscar todos los ítems presupuestarios con ese código
+    # Función para obtener ItemPresupuestario por código
+    async def obtener_item_presupuestario(db, codigo):
         result = await db.execute(
-            select(ItemPresupuestario).where(ItemPresupuestario.codigo == d["codigo"])
+            select(ItemPresupuestario).where(ItemPresupuestario.codigo == codigo)
         )
-        items_con_codigo = result.scalars().all()
+        return result.scalars().first()
 
-        # Buscar el primero que no haya sido usado aún
-        item = None
-        for candidate in items_con_codigo:
-            if candidate.id_item_presupuestario not in item_presupuestarios_utilizados:
-                item = candidate
-                break
-
-        if not item:
-            print(f"❌ Todos los ítems con código={d['codigo']} ya fueron utilizados.")
-            continue
-
+    # Función para crear DetalleTarea si no existe
+    async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion):
         # Verificar si ya existe el detalle exacto
         result = await db.execute(
             select(DetalleTarea).where(
-                DetalleTarea.id_item_presupuestario == item.id_item_presupuestario,
-                DetalleTarea.nombre == d["nombre"]
-            )
-        )
-        existe = result.scalars().first()
-
-        if not existe:
-            nuevos_detalles.append(
-                DetalleTarea(
-                    id_detalle_tarea=uuid.uuid4(),
-                    id_item_presupuestario=item.id_item_presupuestario,
-                    nombre=d["nombre"],
-                    descripcion=d["descripcion"],
-                    caracteristicas=None
+                and_(
+                    DetalleTarea.id_item_presupuestario == item_presupuestario.id_item_presupuestario,
+                    DetalleTarea.nombre == nombre
                 )
             )
-            item_presupuestarios_utilizados.add(item.id_item_presupuestario)
+        )
+        detalle_existente = result.scalars().first()
+        
+        if not detalle_existente:
+            nuevo_detalle = DetalleTarea(
+                id_detalle_tarea=uuid.uuid4(),
+                id_item_presupuestario=item_presupuestario.id_item_presupuestario,
+                nombre=nombre,
+                descripcion=descripcion,
+                caracteristicas=None
+            )
+            db.add(nuevo_detalle)
+            await db.flush()  # Para obtener el ID sin hacer commit
+            return nuevo_detalle
+        
+        return detalle_existente
 
+    # Procesar todos los detalles
+    detalles_creados = []
+    for detalle_info in detalles:
+        # Obtener el item presupuestario
+        item_presupuestario = await obtener_item_presupuestario(db, detalle_info["codigo"])
+        
+        if not item_presupuestario:
+            print(f"❌ No se encontró ItemPresupuestario con código: {detalle_info['codigo']}")
+            continue
+        
+        # Crear o obtener el DetalleTarea
+        detalle_tarea = await crear_detalle_tarea_si_no_existe(
+            db, 
+            item_presupuestario, 
+            detalle_info["nombre"], 
+            detalle_info["descripcion"]
+        )
+        
+        # Guardar información para asociaciones posteriores
+        detalles_creados.append({
+            "detalle_tarea": detalle_tarea,
+            "tipos_poa": detalle_info["tipos_poa"]
+        })
 
-    if nuevos_detalles:
-        db.add_all(nuevos_detalles)
-        await db.commit()
-        print(f"✅ Se insertaron {len(nuevos_detalles)} DETALLE_TAREA.")
-    else:
-        print("ℹ️ Todos los DETALLE_TAREA ya existen.")
+    await db.commit()
+    print(f"✅ Se procesaron {len(detalles_creados)} detalles de tarea.")
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Insertar relaciones TIPO_POA_DETALLE_TAREA
     # ─────────────────────────────────────────────────────────────────────────────
-    # Asociar los detalles con los tipos de POA
-    await asociar_detalles_a_tipos_poa(db, items_codigo)
 
-async def asociar_detalles_a_tipos_poa(db, items):
-    # Mapear los códigos reales de TipoPOA
-    tipos_poa_map = {
-        "PIM": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PIM")),
-        "PTT": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PTT")),
-        # Estos 4 comparten tareas comunes (mapeadas con PVIF)
-        "PVIF": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PVIF")),
-        "PIIF": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PIIF")),
-        "PIS": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PIS")),
-        "PIGR": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PIGR")),
-        "PVIS": await db.scalar(select(TipoPOA).where(TipoPOA.codigo_tipo == "PVIS")),
-    }
+    async def asociar_detalles_a_tipos_poa(db, detalles_creados):
+        # Mapear los códigos reales de TipoPOA
+        tipos_poa_map = {}
+        codigos_tipo = ["PIM", "PTT", "PVIF", "PIIF", "PIS", "PIGR", "PVIS"]
+        
+        for codigo in codigos_tipo:
+            result = await db.execute(select(TipoPOA).where(TipoPOA.codigo_tipo == codigo))
+            tipo_poa = result.scalars().first()
+            if tipo_poa:
+                tipos_poa_map[codigo] = tipo_poa
+            else:
+                print(f"⚠️ No se encontró TipoPOA con código: {codigo}")
 
-    asociaciones_realizadas = 0
+        asociaciones_realizadas = 0
+        
+        for detalle_info in detalles_creados:
+            detalle_tarea = detalle_info["detalle_tarea"]
+            tipos_poa_codigos = detalle_info["tipos_poa"]
+            
+            for codigo_tipo in tipos_poa_codigos:
+                tipo_poa = tipos_poa_map.get(codigo_tipo)
+                if not tipo_poa:
+                    continue
+                    
+                # Verificar si la asociación ya existe
+                result = await db.execute(
+                    select(TipoPoaDetalleTarea).where(
+                        and_(
+                            TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
+                            TipoPoaDetalleTarea.id_detalle_tarea == detalle_tarea.id_detalle_tarea
+                        )
+                    )
+                )
+                
+                if not result.scalars().first():
+                    nueva_asociacion = TipoPoaDetalleTarea(
+                        id_tipo_poa_detalle_tarea=uuid.uuid4(),
+                        id_tipo_poa=tipo_poa.id_tipo_poa,
+                        id_detalle_tarea=detalle_tarea.id_detalle_tarea
+                    )
+                    db.add(nueva_asociacion)
+                    asociaciones_realizadas += 1
 
-    for item in items:
-        partes = item["nombre"].split(";")
-        if len(partes) != 3:
-            print(f"Formato inválido en nombre: {item['nombre']}")
-            continue
+        await db.commit()
+        print(f"✅ Se crearon {asociaciones_realizadas} asociaciones nuevas entre TipoPOA y DetalleTarea.")
 
-        codigo = item["codigo"].strip()
-        partes = [p.strip() for p in partes]
-
-        # Obtener el ItemPresupuestario exacto
-        result_item = await db.execute(
-            select(ItemPresupuestario).where(
-                ItemPresupuestario.codigo == codigo,
-                ItemPresupuestario.nombre == item["nombre"]
-            )
-        )
-        item_obj = result_item.scalars().first()
-        if not item_obj:
-            print(f"No se encontró ItemPresupuestario con código={codigo} y nombre={item['nombre']}")
-            continue
-
-        # Obtener todos los detalles asociados a ese ítem
-        result_detalle = await db.execute(
-            select(DetalleTarea).where(
-                DetalleTarea.id_item_presupuestario == item_obj.id_item_presupuestario
-            )
-        )
-        detalles = result_detalle.scalars().all()
-
-        if not detalles:
-            print(f"No se encontró ningún DetalleTarea para item presupuestario con código={codigo}")
-            continue
-
-        for detalle in detalles:
-            if partes[0] != "0" and tipos_poa_map["PIM"]:
-                asociaciones_realizadas += await insertar_si_no_existe(db, tipos_poa_map["PIM"], detalle)
-            if partes[1] != "0" and tipos_poa_map["PTT"]:
-                asociaciones_realizadas += await insertar_si_no_existe(db, tipos_poa_map["PTT"], detalle)
-            if partes[2] != "0":
-                for clave in ["PVIF", "PIIF", "PIS", "PIGR", "PVIS"]:
-                    tipo = tipos_poa_map.get(clave)
-                    if tipo:
-                        asociaciones_realizadas += await insertar_si_no_existe(db, tipo, detalle)
-
-        if not detalle:
-            print(f"No se encontró DetalleTarea para item presupuestario con código={codigo}")
-            continue
-
-        # Asociar según cada posición
-        if partes[0] != "0" and tipos_poa_map["PIM"]:
-            asociaciones_realizadas += await insertar_si_no_existe(db, tipos_poa_map["PIM"], detalle)
-
-        if partes[1] != "0" and tipos_poa_map["PTT"]:
-            asociaciones_realizadas += await insertar_si_no_existe(db, tipos_poa_map["PTT"], detalle)
-
-        if partes[2] != "0":
-            for clave in ["PVIF", "PIIF", "PIS", "PIGR", "PVIS"]:
-                tipo = tipos_poa_map.get(clave)
-                if tipo:
-                    asociaciones_realizadas += await insertar_si_no_existe(db, tipo, detalle)
-
-    await db.commit()
-    print(f"Asociaciones nuevas totales: {asociaciones_realizadas}")
-
-
-# Función auxiliar que evita duplicados
-async def insertar_si_no_existe(db, tipo_poa, detalle):
-    ya_existe = await db.scalar(select(TipoPoaDetalleTarea).where(
-        TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
-        TipoPoaDetalleTarea.id_detalle_tarea == detalle.id_detalle_tarea
-    ))
-    if not ya_existe:
-        db.add(
-            TipoPoaDetalleTarea(
-                id_tipo_poa_detalle_tarea=uuid.uuid4(),
-                id_tipo_poa=tipo_poa.id_tipo_poa,
-                id_detalle_tarea=detalle.id_detalle_tarea
-            )
-        )
-        return 1
-    return 0
+    # Ejecutar las asociaciones
+    await asociar_detalles_a_tipos_poa(db, detalles_creados)
