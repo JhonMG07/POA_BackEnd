@@ -19,12 +19,14 @@ from app.utils import eliminar_tareas_y_actividades
 import io
 import pandas as pd
 import xlsxwriter
+from sqlalchemy import func
 
 from reportlab.lib.pagesizes import letter,landscape
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.styles import ParagraphStyle
+import unicodedata
 
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -33,6 +35,20 @@ app = FastAPI()
 #middlewares
 # CORS middleware
 add_middlewares(app)
+
+def quitar_tildes(texto):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+def normalizar_texto(texto):
+    # Quita tildes, pasa a minúsculas, elimina espacios extra y números
+    texto = quitar_tildes(texto).lower()
+    texto = re.sub(r'\d+', '', texto)         # Elimina todos los números
+    texto = re.sub(r'\s+', ' ', texto)        # Reemplaza múltiples espacios por uno solo
+    texto = texto.strip()                     # Quita espacios al inicio y final
+    return texto
 
 @app.on_event("startup")
 async def on_startup():
@@ -1085,8 +1101,7 @@ async def transformar_archivo_excel(
                 # Buscar el id_item_presupuestario
                 result = await db.execute(
                     select(models.ItemPresupuestario).where(
-                        models.ItemPresupuestario.codigo == tarea["item_presupuestario"]
-                        and models.ItemPresupuestario.descripcion == nombre_sin_prefijo
+                        (models.ItemPresupuestario.codigo == tarea["item_presupuestario"])
                     )
                 )
                 items_presupuestarios = result.scalars().all()
@@ -1098,29 +1113,34 @@ async def transformar_archivo_excel(
                         status_code=400,
                         detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró el item presupuestario con código '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
                     )
-                
-                # Tomar el primer id_item_presupuestario encontrado
-                id_item_presupuestario = items_presupuestarios[0].id_item_presupuestario
-
-                # Buscar el id_detalle_tarea
-                result = await db.execute(
-                    select(models.DetalleTarea).where(
-                        models.DetalleTarea.id_item_presupuestario == id_item_presupuestario
+                nombre_normalizado = normalizar_texto(nombre_sin_prefijo)
+                encontrado = False
+                for item in items_presupuestarios:
+                     # Trae todos los detalles de tarea para ese item
+                    result = await db.execute(
+                        select(models.DetalleTarea).where(
+                            models.DetalleTarea.id_item_presupuestario == item.id_item_presupuestario
+                        )
                     )
-                )
-                detalles_tarea = result.scalars().all()
-
-                if not detalles_tarea:
-                    # Eliminar todo lo subido y lanzar excepción
+                    detalles_tarea = result.scalars().all()
+                    # Normaliza y compara en Python
+                    for detalle in detalles_tarea:
+                        
+                        nombre_bd = normalizar_texto(detalle.nombre)
+                        if nombre_bd == nombre_normalizado:
+                            id_detalle_tarea = detalle.id_detalle_tarea
+                            encontrado = True
+                            break
+                        else:
+                            continue  # Sigue con el siguiente item si no encontró
+                    if encontrado:
+                        break
+                if not encontrado:  # Si no encontró ningún detalle de tarea
                     await eliminar_tareas_y_actividades(id_poa, db)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"No se guardo nada en la base de datos debido a que: \n No se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' en la tarea '{tarea['nombre']}'"
+                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
                     )
-
-                # Tomar el primer id_detalle_tarea encontrado
-                id_detalle_tarea = detalles_tarea[0].id_detalle_tarea
-
                # Crear la tarea
                 nueva_tarea = models.Tarea(
                     id_tarea=uuid.uuid4(),
@@ -1134,6 +1154,37 @@ async def transformar_archivo_excel(
                     saldo_disponible=tarea["total"],  # Inicialmente igual al total
                 )
                 db.add(nueva_tarea)
+
+                await db.commit()
+                await db.refresh(nueva_tarea)  
+
+                # Guardar programaciones mensuales si existen y no es solo "suman"
+                prog_ejec = tarea.get("programacion_ejecucion", {})
+                for fecha, valor in prog_ejec.items():
+                    # ...dentro del for fecha, valor in prog_ejec.items()...
+                    if fecha == "suman":
+                        continue
+                    try:
+                        # Extraer el mes y convertirlo a nombre en español
+                        mes_num = int(fecha[5:7])  # "2025-03-01..." -> 3
+                        meses_es = [
+                            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+                            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+                        ]
+                        mes_nombre = meses_es[mes_num - 1]
+                        valor_float = float(valor)
+                        nueva_prog = models.ProgramacionMensual(
+                            id_programacion=uuid.uuid4(),
+                            id_tarea=nueva_tarea.id_tarea,
+                            mes=mes_nombre,  # Guardar el nombre del mes
+                            valor=valor_float
+                        )
+                        db.add(nueva_prog)
+                    except Exception as e:
+                        continue
+                await db.commit()
+
+
 
             # Confirmar las tareas después de agregarlas
             await db.commit()
@@ -1257,7 +1308,16 @@ async def reporte_poa(
     from collections import defaultdict
     for desc, act in actividades_dict.items():
         tareas_actividad = [t for t in tareas if t.id_actividad in act["ids_actividad"]]
-        tareas_grouped = defaultdict(lambda: {"cantidad": 0, "total": 0, "nombres": [], "id_detalle_tarea": None, "detalle_descripcion": None})
+        tareas_grouped = defaultdict(lambda: {
+            "cantidad": 0, 
+            "total": 0, 
+            "nombres": [], 
+            "id_detalle_tarea": None, 
+            "detalle_descripcion": None,
+            "programacion_mensual": defaultdict(float)
+            })
+        
+        
         for tarea in tareas_actividad:
             key = tarea.id_detalle_tarea
             tareas_grouped[key]["cantidad"] += tarea.cantidad
@@ -1265,6 +1325,17 @@ async def reporte_poa(
             tareas_grouped[key]["nombres"].append(tarea.nombre)
             tareas_grouped[key]["id_detalle_tarea"] = tarea.id_detalle_tarea
             tareas_grouped[key]["detalle_descripcion"] = tarea.detalle_descripcion
+
+            # Obtener la programación mensual de esta tarea
+            result_prog = await db.execute(
+                select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_tarea == tarea.id_tarea)
+            )
+            programaciones = result_prog.scalars().all()
+            for prog in programaciones:
+                mes = prog.mes
+                valor = float(prog.valor)
+                tareas_grouped[key]["programacion_mensual"][mes] += valor
+
 
         # Numerar las tareas agrupadas (1.1, 1.2, ...)
         tareas_final = []
@@ -1294,13 +1365,15 @@ async def reporte_poa(
                 num_actividad = str(list(actividades_dict.keys()).index(desc)+1)
 
             nombre_tarea = f"{num_actividad}.{idx} {nombre_limpio}"
+            # Convertir programacion_mensual a dict simple
+            prog_mensual_dict = {mes: round(valor, 2) for mes, valor in datos["programacion_mensual"].items()}
 
             tareas_final.append({
                 "nombre": nombre_tarea,
                 "item_presupuestario": item_presupuestario,
                 "cantidad": datos["cantidad"],
                 "total": datos["total"],
-                
+                "programacion_mensual": prog_mensual_dict 
             })
         act["tareas"] = tareas_final
 
@@ -1324,6 +1397,7 @@ async def reporte_poa(
     def extraer_numero_actividad(desc):
         match = re.match(r"\((\d+)\)", desc.strip())
         return int(match.group(1)) if match else 9999  # 9999 para los que no tengan número
+    
     # Eliminar 'ids_actividad' de cada actividad antes de devolver el JSON
     for act in actividades_dict.values():
         if "ids_actividad" in act:
@@ -1357,7 +1431,6 @@ async def reporte_poa(
     }
     return reporte
 
-
 @app.post("/reporte-poa/excel/")
 async def descargar_excel(
     reporte: dict = Body(...)
@@ -1386,8 +1459,10 @@ async def descargar_excel(
     row += 1
     worksheet.write(row, 0, f"total de poas: {reporte['numero_poas']}",bold)
     row += 1
-    worksheet.write(row, 0, f"total general: {round(reporte['total_general'],2)}",bold)
+    worksheet.write(row, 0, f"total general: ${reporte['total_general']:.2f}", bold)
     row += 2
+
+    
 
     # Tipos de proyecto encontrados
     worksheet.merge_range(row, 0, row, 2, "tipos_proyecto_encontrados", bold)
@@ -1404,23 +1479,57 @@ async def descargar_excel(
 
     row += 2
 
-    # Actividades y tareas
+    # --- Detectar todos los meses presentes en todas las tareas ---
+    meses_presentes = set()
     for actividad in reporte["actividades"]:
-        # Combina desde la columna 0 hasta la 3 (A-D)
-        worksheet.merge_range(row, 0, row, 3, f"Actividad: {actividad['descripcion_actividad']}", bold_wrap)
+        for tarea in actividad["tareas"]:
+            meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
+    # Ordenar meses según el año fiscal ecuatoriano
+    meses_orden = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ]
+    meses_final = [m for m in meses_orden if m in meses_presentes]
+
+
+    # --- ACTIVIDADES Y TAREAS ---
+    for actividad in reporte["actividades"]:
+        worksheet.merge_range(row, 0, row, 3 + len(meses_final), f"Actividad: {actividad['descripcion_actividad']}", bold_wrap)
         row += 1
-        worksheet.write_row(row, 0, ["Tarea", "Item Presupuestario", "Cantidad", "Total Tarea"], subheader)
+        # Cabecera dinámica
+        cabecera = ["Tarea", "Item Presupuestario", "Cantidad", "Total Tarea"] + [m.capitalize() for m in meses_final]
+        worksheet.write_row(row, 0, cabecera, subheader)
         row += 1
         for tarea in actividad["tareas"]:
-            worksheet.write_row(row, 0, [
+            fila = [
                 tarea["nombre"],
                 tarea["item_presupuestario"],
                 tarea["cantidad"],
-                tarea["total"]
-            ], border)
+                f"${tarea['total']:.2f}"  # <-- Formato dinero
+            ]
+            # Agregar valores de cada mes en el orden correcto
+            for mes in meses_final:
+                valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
+                fila.append(f"${valor_mes:.2f}")  # <-- Formato dinero
+            worksheet.write_row(row, 0, fila, border)
             row += 1
         row += 1  # Espacio entre actividades
 
+    # --- RESUMEN MENSUAL ---
+    # Sumar todos los valores de cada mes de todas las tareas
+    resumen_mensual = {mes: 0 for mes in meses_final}
+    for actividad in reporte["actividades"]:
+        for tarea in actividad["tareas"]:
+            for mes in meses_final:
+                resumen_mensual[mes] += tarea.get("programacion_mensual", {}).get(mes, 0)
+
+    # Escribir resumen mensual
+    row += 1
+    worksheet.write(row, 0, "RESUMEN MENSUAL", bold)
+    row += 1
+    worksheet.write_row(row, 0, [m.capitalize() for m in meses_final], header)
+    row += 1
+    worksheet.write_row(row, 0, [f"${round(resumen_mensual[mes], 2):.2f}" for mes in meses_final], border)
     workbook.close()
     output.seek(0)
 
@@ -1435,7 +1544,7 @@ async def descargar_pdf(
     reporte: dict = Body(...)
 ):
     output = io.BytesIO()
-    custom_size = (600, 900)  # ancho x alto en puntos
+    custom_size = (1500, 900)  # ancho x alto en puntos
 
     doc = SimpleDocTemplate(output, pagesize=custom_size)
     elements = []
@@ -1448,7 +1557,7 @@ async def descargar_pdf(
     elements.append(Paragraph(f"<b>Año:</b> {reporte['anio']}", styleN))
     elements.append(Paragraph(f"<b>Tipo de Proyecto:</b> {reporte['tipo_proyecto']}", styleN))
     elements.append(Paragraph(f"<b>Total de POAs:</b> {reporte['numero_poas']}", styleN))
-    elements.append(Paragraph(f"<b>Total general:</b> {round(reporte['total_general'],2)}", styleN))
+    elements.append(Paragraph(f"<b>Total general:</b> ${reporte['total_general']:.2f}", styleN))
     elements.append(Spacer(1, 12))
 
     # Tipos de proyecto encontrados
@@ -1465,25 +1574,42 @@ async def descargar_pdf(
     elements.append(table)
     elements.append(Spacer(1, 16))
 
+    # --- Detectar todos los meses presentes en todas las tareas ---
+    meses_presentes = set()
+    for actividad in reporte["actividades"]:
+        for tarea in actividad["tareas"]:
+            meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
+    meses_orden = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ]
+    meses_final = [m for m in meses_orden if m in meses_presentes]
+
+
     # Actividades y tareas
     for actividad in reporte["actividades"]:
         elements.append(Paragraph(f"<b>Actividad: {actividad['descripcion_actividad']}</b>", styleN))
-        data = [
-            [
-                Paragraph("<b>Tarea</b>", style_cell),
-                Paragraph("<b>Item Presupuestario</b>", style_cell),
-                Paragraph("<b>Cantidad</b>", style_cell),
-                Paragraph("<b>Total Tarea</b>", style_cell)
-            ]
-        ]
+        # Cabecera dinámica
+        cabecera = [
+            Paragraph("<b>Tarea</b>", style_cell),
+            Paragraph("<b>Item Presupuestario</b>", style_cell),
+            Paragraph("<b>Cantidad</b>", style_cell),
+            Paragraph("<b>Total Tarea</b>", style_cell)
+        ] + [Paragraph(f"<b>{m.capitalize()}</b>", style_cell) for m in meses_final]
+        data = [cabecera]
         for tarea in actividad["tareas"]:
-            data.append([
+            fila = [
                 Paragraph(str(tarea["nombre"]), style_cell),
                 Paragraph(str(tarea["item_presupuestario"]), style_cell),
                 Paragraph(str(tarea["cantidad"]), style_cell),
-                Paragraph(str(tarea["total"]), style_cell)
-            ])
-        table = Table(data, hAlign='LEFT', colWidths=[180, 80, 60, 60])
+                Paragraph(f"${tarea['total']:.2f}", style_cell)  # <-- Formato dinero
+            ]
+            for mes in meses_final:    
+                valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
+                fila.append(Paragraph(f"${valor_mes:.2f}", style_cell))  # <-- Formato dinero
+            data.append(fila)
+            
+        table = Table(data, hAlign='LEFT', colWidths=[180, 80, 60, 60] + [50]*len(meses_final))
         table.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
             ('GRID', (0,0), (-1,-1), 1, colors.black),
@@ -1493,14 +1619,34 @@ async def descargar_pdf(
         elements.append(table)
         elements.append(Spacer(1, 12))
 
+    # --- RESUMEN MENSUAL ---
+    resumen_mensual = {mes: 0 for mes in meses_final}
+    for actividad in reporte["actividades"]:
+        for tarea in actividad["tareas"]:
+            for mes in meses_final:
+                resumen_mensual[mes] += tarea.get("programacion_mensual", {}).get(mes, 0)
+
+    elements.append(Paragraph("<b>RESUMEN MENSUAL</b>", styleH))
+    resumen_data = [[Paragraph(m.capitalize(), style_cell) for m in meses_final]]
+    resumen_data.append([Paragraph(f"${round(resumen_mensual[mes], 2):.2f}", style_cell) for mes in meses_final])
+    resumen_table = Table(resumen_data, hAlign='LEFT', colWidths=[50]*len(meses_final))
+    resumen_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+    ]))
+    elements.append(resumen_table)
+
     doc.build(elements)
     output.seek(0)
-
     return StreamingResponse(
         output,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=reporte-poa.pdf"}
     )
+
+
+
 
 # programacion mensual
 
