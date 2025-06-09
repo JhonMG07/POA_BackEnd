@@ -174,11 +174,14 @@ async def seed_all_data():
     estados_existentes = set(result.scalars().all())
 
     estados = [
-        {"nombre": "Planificación", "desc": "Proyecto en fase de planificación inicial", "edita": True},
-        {"nombre": "En Ejecución", "desc": "Proyecto en desarrollo activo", "edita": True},
-        {"nombre": "Suspendido", "desc": "Proyecto temporalmente detenido", "edita": False},
-        {"nombre": "Completado", "desc": "Proyecto finalizado exitosamente", "edita": False},
-        {"nombre": "Cancelado", "desc": "Proyecto interrumpido antes de su conclusión", "edita": False},
+        {"nombre": "Aprobado", "desc": "El proyecto ha sido revisado y validado por las instancias correspondientes, y está autorizado para iniciar su ejecución.", "edita": True},
+        {"nombre": "En Ejecución", "desc": "El proyecto está actualmente en desarrollo, cumpliendo con las actividades planificadas dentro de los plazos establecidos.", "edita": True},
+        {"nombre": "En Ejecución-Prorroga técnica", "desc": "El proyecto sigue en ejecución, pero se le ha otorgado una extensión de tiempo debido a causas justificadas de tipo técnico.", "edita": True},
+        {"nombre": "Suspendido", "desc": "La ejecución del proyecto ha sido detenida temporalmente por motivos administrativos, financieros o técnicos, y está a la espera de una resolución.", "edita": False},
+        {"nombre": "Cerrado", "desc": "El proyecto ha finalizado completamente, cumpliendo con los objetivos y requisitos establecidos sin observaciones relevantes.", "edita": False},
+        {"nombre": "Cerrado con Observaciones", "desc": "El proyecto fue finalizado, pero durante su ejecución se identificaron observaciones menores que no comprometieron gravemente sus resultados.", "edita": False},
+        {"nombre": "Cerrado con Incumplimiento", "desc": "El proyecto fue finalizado, pero no cumplió con los objetivos, metas o requerimientos establecidos, y presenta fallas sustanciales.", "edita": False},
+        {"nombre": "No Ejecutado", "desc": "El proyecto fue aprobado, pero no se inició su ejecución por falta de recursos, cambios de prioridades u otras razones justificadas.", "edita": False},
     ]
 
     nuevos_estados = [
@@ -315,7 +318,25 @@ async def seed_all_data():
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
-            "descripcion": "Asistente de investigación (ejemplo)",
+            "descripcion": "Asistente de investigación",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730606",
+            "nombre": "Contratación de servicios profesionales",
+            "descripcion": "Servicios profesionales 1",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730606",
+            "nombre": "Contratación de servicios profesionales",
+            "descripcion": "Servicios profesionales 2",
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+        },
+        {
+            "codigo": "730606",
+            "nombre": "Contratación de servicios profesionales",
+            "descripcion": "Servicios profesionales 3",
             "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
         },
         {
@@ -335,26 +356,26 @@ async def seed_all_data():
             "codigo": "840107",
             "nombre": "Adquisición de equipos informáticos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT"]
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
         },
         {
             "codigo": "731407",
             "nombre": "Adquisición de equipos informáticos", 
             "descripcion": "",
-            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
         },
         # Casos #ojo - equipos especializados (dos códigos alternativos)
         {
             "codigo": "840104",
             "nombre": "Adquisición de equipos especializados y maquinaria",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT"]
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
         },
         {
             "codigo": "731404",
             "nombre": "Adquisición de equipos especializados y maquinaria",
             "descripcion": "",
-            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
         },
         {
             "codigo": "730829",
@@ -417,6 +438,7 @@ async def seed_all_data():
             "descripcion": "(valor mas de 100 y durabilidad)",
             "tipos_poa": ["PIM"]
         },
+        # Detalles específicos para PIM
         {
             "codigo": "730304",
             "nombre": "Viáticos al exterior",
@@ -462,7 +484,7 @@ async def seed_all_data():
         },
         {
             "codigo": "770102",
-            "nombre": "Viáticos al interior",
+            "nombre": "Propiedad intelectual",
             "descripcion": "",
             "tipos_poa": ["PTT"]
         },
@@ -490,12 +512,13 @@ async def seed_all_data():
 
     # Función para crear DetalleTarea si no existe
     async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion):
-        # Verificar si ya existe el detalle exacto
+        # Verificar si ya existe el detalle exacto (incluyendo nombre Y descripción)
         result = await db.execute(
             select(DetalleTarea).where(
                 and_(
                     DetalleTarea.id_item_presupuestario == item_presupuestario.id_item_presupuestario,
-                    DetalleTarea.nombre == nombre
+                    DetalleTarea.nombre == nombre,
+                    DetalleTarea.descripcion == descripcion  # ← AGREGAR ESTA LÍNEA
                 )
             )
         )
