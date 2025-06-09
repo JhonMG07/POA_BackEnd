@@ -594,7 +594,15 @@ async def crear_actividades_para_poa(
     db.add_all(actividades)
     await db.commit()
 
-    return {"msg": f"{len(actividades)} actividades creadas correctamente"}
+    ids_creados = [str(act.id_actividad) for act in actividades]
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "msg": f"{len(actividades)} actividades creadas correctamente",
+            "ids_actividades": ids_creados,
+        }
+    )
 
 
 #tareas
