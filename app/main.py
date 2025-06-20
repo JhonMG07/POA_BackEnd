@@ -1,5 +1,5 @@
 from datetime import datetime,timezone
-from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body
+from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -27,6 +27,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.styles import ParagraphStyle
 import unicodedata
+from sqlalchemy.orm import selectinload
 
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -1049,6 +1050,7 @@ async def transformar_archivo_excel(
     db: AsyncSession = Depends(get_db),
     id_poa: uuid.UUID = Form(...),  # Recibir el ID del POA
     confirmacion: bool = Form(False),  # Confirmación del frontend
+    usurio: models.Usuario = Depends(get_current_user)
 ):
     # Validar que el archivo tenga una extensión válida
     if not file.filename.endswith((".xls", ".xlsx")):
@@ -1079,6 +1081,19 @@ async def transformar_archivo_excel(
 
             # Si hay confirmación, eliminar las tareas y actividades asociadas
             await eliminar_tareas_y_actividades(id_poa,db)
+
+            # Registrar log de eliminación
+            log_elim = models.LogCargaExcel(
+                id_log=uuid.uuid4(),
+                id_poa=id_poa,
+                id_usuario=usurio.id_usuario,
+                fecha_carga=datetime.now(),
+                mensaje=f"Se eliminaron las actividades , sus tareas y programaciones mensuales asociadas debido a que el usuario decidió reemplazar los datos del POA con un nuevo archivo.",
+                nombre_archivo=file.filename,
+                hoja=hoja
+            )
+            db.add(log_elim)
+            await db.commit()
 
         # Lista para registrar errores
         errores = []
@@ -1145,6 +1160,9 @@ async def transformar_archivo_excel(
                         break
                 if not encontrado:  # Si no encontró ningún detalle de tarea
                     await eliminar_tareas_y_actividades(id_poa, db)
+                    db.add(log_elim)
+                    await db.commit()
+
                     raise HTTPException(
                         status_code=400,
                         detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
@@ -1191,11 +1209,23 @@ async def transformar_archivo_excel(
                     except Exception as e:
                         continue
                 await db.commit()
-
-
-
             # Confirmar las tareas después de agregarlas
             await db.commit()
+
+        # Registrar log de carga
+        log_crea = models.LogCargaExcel(
+            id_log=uuid.uuid4(),
+            id_poa=id_poa,
+            id_usuario=usurio.id_usuario,
+            fecha_carga=datetime.now(),
+            # calcula el numero de actividades creadas y se muestra en el mensaje se cargaron ... actividades y sus tareas asociadas desde el archivo {file.filename}."
+            mensaje=f"Se cargaron {len(json_result['actividades'])} actividades y sus tareas asociadas desde el archivo {file.filename}.",
+            nombre_archivo=file.filename,
+            hoja=hoja
+        )
+        db.add(log_crea)
+        await db.commit()
+        
         # Retornar el resultado
         if errores:
             return {
@@ -1653,8 +1683,60 @@ async def descargar_pdf(
         headers={"Content-Disposition": "attachment; filename=reporte-poa.pdf"}
     )
 
+@app.get("/logs-carga-excel/")
+async def obtener_logs_carga_excel(
+    db: AsyncSession = Depends(get_db),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+):
+    try:
+        query = (
+            select(models.LogCargaExcel)
+            .options(
+                selectinload(models.LogCargaExcel.usuario),
+                selectinload(models.LogCargaExcel.poa).selectinload(models.Poa.proyecto)
+            )
+            .join(models.Usuario)
+            .join(models.Poa)
+            .join(models.Proyecto)
+        )
+        # Validar formato de fecha y convertir a datetime
+        if fecha_inicio:
+            try:
+                fecha_inicio_dt = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+                query = query.where(models.LogCargaExcel.fecha_carga >= fecha_inicio_dt)
+            except ValueError:
+                return JSONResponse(content=[], status_code=200)
+        if fecha_fin:
+            try:
+                fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d")
+                # Para incluir todo el día de la fecha_fin, sumamos 1 día y restamos 1 segundo
+                from datetime import timedelta
+                fecha_fin_dt = fecha_fin_dt + timedelta(days=1) - timedelta(seconds=1)
+                query = query.where(models.LogCargaExcel.fecha_carga <= fecha_fin_dt)
+            except ValueError:
+                return JSONResponse(content=[], status_code=200)
+        query = query.order_by(models.LogCargaExcel.fecha_carga.desc())
 
+        result = await db.execute(query)
+        logs = result.scalars().all()
 
+        respuesta = []
+        for log in logs:
+            respuesta.append({
+                "fecha_carga": log.fecha_carga.strftime("%Y-%m-%d %H:%M:%S"),
+                "usuario": log.usuario.nombre_usuario if log.usuario else "",
+                "correo_usuario": log.usuario.email if log.usuario else "",
+                "mensaje": log.mensaje,
+                "nombre_archivo": log.nombre_archivo,
+                "hoja": log.hoja,
+                "codigo_poa": log.poa.codigo_poa if log.poa else "",
+                "proyecto": log.poa.proyecto.titulo if log.poa and log.poa.proyecto else ""
+            })
+        return respuesta
+    except Exception as e:
+        print("Error en logs-carga-excel:", e)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # programacion mensual
 
