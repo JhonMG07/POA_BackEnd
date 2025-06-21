@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from app.database import Base
-
+from datetime import datetime,timezone
 # se puede mejorar la legibilidad del archivo separando los modelos en diferentes archivos
 # y luego importarlos aquí, pero por simplicidad los mantendremos en un solo archivo
 
@@ -205,7 +205,7 @@ class ProgramacionMensual(Base):
 
     id_programacion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_tarea = Column(UUID(as_uuid=True), ForeignKey("TAREA.id_tarea"), nullable=False)
-    mes = Column(String(7), nullable=False)  # Formato: '01-2026', '02-2026', etc.
+    mes = Column(String(15), nullable=False)  # Formato: '01-2026', '02-2026', etc.
     valor = Column(DECIMAL(18, 2), nullable=False)
 
     tarea = relationship("Tarea", back_populates="programacion_mensual")
@@ -321,3 +321,17 @@ class HistoricoPoa(Base):
     poa = relationship("Poa")
     usuario = relationship("Usuario")
     reforma = relationship("ReformaPoa")
+
+
+class LogCargaExcel(Base):
+    __tablename__ = "LOG_CARGA_EXCEL"
+    id_log = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
+    id_usuario = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"), nullable=False)
+    fecha_carga = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    mensaje = Column(String(500), nullable=False)
+    nombre_archivo = Column(String(200), nullable=False)
+    hoja = Column(String(100), nullable=False)
+
+    poa = relationship("Poa")
+    usuario = relationship("Usuario")
