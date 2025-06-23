@@ -194,7 +194,7 @@ class Tarea(Base):
     precio_unitario = Column(DECIMAL(18, 2), nullable=False)
     total = Column(DECIMAL(18, 2), nullable=False)
     saldo_disponible = Column(DECIMAL(18, 2), nullable=False)
-
+    lineaPaiViiv = Column(Integer, nullable=True)
     actividad = relationship("Actividad", back_populates="tareas")
     detalle_tarea = relationship("DetalleTarea")
     programacion_mensual = relationship("ProgramacionMensual", back_populates="tarea", cascade="all, delete-orphan")

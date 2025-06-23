@@ -157,6 +157,7 @@ class TareaCreate(BaseModel):
     detalle_descripcion: str
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
 class TareaOut(BaseModel):
     id_tarea: UUID
@@ -166,6 +167,7 @@ class TareaOut(BaseModel):
     precio_unitario: condecimal(gt=0)
     total: condecimal(gt=0)
     saldo_disponible: condecimal(gt=0)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
     class Config:
         from_attributes = True
@@ -184,6 +186,7 @@ class ActividadOut(BaseModel):
     descripcion_actividad: str
     total_por_actividad: condecimal(max_digits=18, decimal_places=2)
     saldo_actividad: condecimal(max_digits=18, decimal_places=2)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
     class Config:
         from_attributes = True
@@ -206,6 +209,7 @@ class TareaOut(BaseModel):
 class TareaUpdate(BaseModel):
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
 
 #reformas
@@ -237,11 +241,13 @@ class TareaCreateReforma(BaseModel):
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
     justificacion: str
+    lineaPaiViiv: Optional[int] = None
 
 class TareaEditReforma(BaseModel):
     cantidad: Optional[condecimal(gt=0)]
     precio_unitario: Optional[condecimal(gt=0)]
     justificacion: str
+    lineaPaiViiv: Optional[int] = None
 
 class HistoricoPoaOut(BaseModel):
     campo_modificado: str

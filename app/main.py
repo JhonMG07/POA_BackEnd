@@ -637,7 +637,8 @@ async def crear_tarea(
         cantidad=data.cantidad,
         precio_unitario=data.precio_unitario,
         total=total,
-        saldo_disponible=total
+        saldo_disponible=total,
+        lineaPaiViiv=data.lineaPaiViiv
     )
 
     # Actualizar montos en la actividad
@@ -676,7 +677,7 @@ async def editar_tarea(
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     
     # Campos a actualizar y auditar
-    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible"]
+    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible","lineaPaiViiv"]
 
     for campo in campos_auditar:
         valor_anterior = getattr(tarea, campo)
@@ -861,6 +862,8 @@ async def editar_tarea_en_reforma(
     tarea.precio_unitario = data.precio_unitario
     tarea.total = data.cantidad * data.precio_unitario
     tarea.saldo_disponible = tarea.total  # ajustar si hay lógica adicional
+    if data.lineaPaiViiv is not None:
+        tarea.lineaPaiViiv = data.lineaPaiViiv
 
     db.add(tarea)
 
@@ -947,7 +950,8 @@ async def agregar_tarea_en_reforma(
         cantidad=data.cantidad,
         precio_unitario=data.precio_unitario,
         total=total,
-        saldo_disponible=total
+        saldo_disponible=total,
+        lineaPaiViiv=data.lineaPaiViiv
     )
     db.add(nueva_tarea)
 
