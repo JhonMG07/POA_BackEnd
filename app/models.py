@@ -65,7 +65,7 @@ class Proyecto(Base):
 
     id_proyecto = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_proyecto = Column(String(50), nullable=False)
-    titulo = Column(String(200), nullable=False)
+    titulo = Column(String(2000), nullable=False)
     id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
     id_estado_proyecto = Column(UUID(as_uuid=True), ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
     id_director_proyecto = Column(String(200), nullable=True)
