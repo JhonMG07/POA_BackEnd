@@ -1,4 +1,5 @@
 from datetime import datetime,timezone
+from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -626,7 +627,9 @@ async def crear_tarea(
     if not detalle:
         raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
 
-    total = data.precio_unitario * data.cantidad
+    cantidad = data.cantidad or Decimal("0")
+    precio_unitario = data.precio_unitario or Decimal("0")
+    total = precio_unitario * cantidad
 
     nueva_tarea = models.Tarea(
         id_tarea=uuid.uuid4(),
@@ -634,8 +637,8 @@ async def crear_tarea(
         id_detalle_tarea=data.id_detalle_tarea,
         nombre=data.nombre,
         detalle_descripcion=data.detalle_descripcion,
-        cantidad=data.cantidad,
-        precio_unitario=data.precio_unitario,
+        cantidad=cantidad,
+        precio_unitario=precio_unitario,
         total=total,
         saldo_disponible=total,
         lineaPaiViiv=data.lineaPaiViiv

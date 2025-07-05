@@ -152,25 +152,26 @@ class ActividadesBatchCreate(BaseModel):
     actividades: List[ActividadCreate]
 
 class TareaCreate(BaseModel):
-    id_detalle_tarea: UUID
-    nombre: str
-    detalle_descripcion: str
-    cantidad: condecimal(gt=0)
-    precio_unitario: condecimal(gt=0)
-    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
+    id_detalle_tarea: Optional[UUID] = None
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
 class TareaOut(BaseModel):
     id_tarea: UUID
-    nombre: str
-    detalle_descripcion: str
-    cantidad: condecimal(gt=0)
-    precio_unitario: condecimal(gt=0)
-    total: condecimal(gt=0)
-    saldo_disponible: condecimal(gt=0)
-    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    total: Optional[condecimal(ge=0)] = 0
+    saldo_disponible: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
     class Config:
         from_attributes = True
+
 
 class DetalleTareaOut(BaseModel):
     id_detalle_tarea: UUID
@@ -196,12 +197,13 @@ class ActividadUpdate(BaseModel):
 
 class TareaOut(BaseModel):
     id_tarea: UUID
-    nombre: str
-    detalle_descripcion: Optional[str]
-    cantidad: condecimal(max_digits=10, decimal_places=2)
-    precio_unitario: condecimal(max_digits=18, decimal_places=2)
-    total: condecimal(max_digits=18, decimal_places=2)
-    saldo_disponible: condecimal(max_digits=18, decimal_places=2)
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    total: Optional[condecimal(ge=0)] = 0
+    saldo_disponible: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
     class Config:
         from_attributes = True
