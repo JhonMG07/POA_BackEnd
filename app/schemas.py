@@ -177,6 +177,7 @@ class DetalleTareaOut(BaseModel):
     id_detalle_tarea: UUID
     nombre: str
     descripcion: Optional[str]
+    caracteristicas: Optional[str]  # Nuevo campo para información específica de la tarea
     id_item_presupuestario: Optional[UUID]  # Nuevo campo agregado
 
     class Config:
