@@ -1259,7 +1259,28 @@ async def get_item_presupuestario(
     if not item:
         raise HTTPException(status_code=404, detail="Item presupuestario no encontrado")
     return item
-  
+
+@app.get("/tareas/{id_tarea}/item-presupuestario", response_model=schemas.ItemPresupuestarioOut)
+async def obtener_item_presupuestario_de_tarea(
+    id_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    # Buscar la tarea y su detalle
+    result = await db.execute(
+        select(models.Tarea)
+        .where(models.Tarea.id_tarea == id_tarea)
+        .options(selectinload(models.Tarea.detalle_tarea).selectinload(models.DetalleTarea.item_presupuestario))
+    )
+    tarea = result.scalars().first()
+
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    if not tarea.detalle_tarea or not tarea.detalle_tarea.item_presupuestario:
+        raise HTTPException(status_code=404, detail="Item presupuestario no asociado a esta tarea")
+
+    return tarea.detalle_tarea.item_presupuestario
+
 @app.post("/reporte-poa/")
 async def reporte_poa(
     anio: str = Form(...),
