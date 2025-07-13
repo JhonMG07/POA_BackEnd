@@ -85,12 +85,12 @@ class Periodo(Base):
     __tablename__ = "PERIODO"
 
     id_periodo = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    codigo_periodo = Column(String(20), nullable=False)
-    nombre_periodo = Column(String(50), nullable=False)
+    codigo_periodo = Column(String(150), nullable=False)
+    nombre_periodo = Column(String(180), nullable=False)
     fecha_inicio = Column(Date, nullable=False)
     fecha_fin = Column(Date, nullable=False)
     anio = Column(String(4), nullable=True)
-    mes = Column(String(15), nullable=True)
+    mes = Column(String(35), nullable=True)
 
 
 class EstadoPOA(Base):
@@ -189,12 +189,14 @@ class Tarea(Base):
     id_actividad = Column(UUID(as_uuid=True), ForeignKey("ACTIVIDAD.id_actividad"), nullable=False)
     id_detalle_tarea = Column(UUID(as_uuid=True), ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=True)
     nombre = Column(String(200))
-    detalle_descripcion = Column(String(500))
+
+    detalle_descripcion = Column(String(5000))
     cantidad = Column(DECIMAL(10, 2), nullable=True, default=0)
     precio_unitario = Column(DECIMAL(18, 2), nullable=True, default=0)
     total = Column(DECIMAL(18, 2), nullable=True, default=0)
     saldo_disponible = Column(DECIMAL(18, 2), nullable=True, default=0)
     lineaPaiViiv = Column(Integer, nullable=True)
+
     actividad = relationship("Actividad", back_populates="tareas")
     detalle_tarea = relationship("DetalleTarea")
     programacion_mensual = relationship("ProgramacionMensual", back_populates="tarea", cascade="all, delete-orphan")
@@ -322,16 +324,16 @@ class HistoricoPoa(Base):
     usuario = relationship("Usuario")
     reforma = relationship("ReformaPoa")
 
-
 class LogCargaExcel(Base):
     __tablename__ = "LOG_CARGA_EXCEL"
     id_log = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
-    id_usuario = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"), nullable=False)
-    fecha_carga = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    mensaje = Column(String(500), nullable=False)
-    nombre_archivo = Column(String(200), nullable=False)
-    hoja = Column(String(100), nullable=False)
-
-    poa = relationship("Poa")
-    usuario = relationship("Usuario")
+    id_poa = Column(String(36), nullable=True)              # UUID del POA como string
+    codigo_poa = Column(String(100), nullable=True)         # Código POA visible
+    id_usuario = Column(String(36), nullable=True)          # UUID del usuario como string
+    usuario_nombre = Column(String(100), nullable=True)     # Nombre del usuario
+    usuario_email = Column(String(100), nullable=True)      # Email del usuario
+    proyecto_nombre = Column(String(200), nullable=True)    # Nombre del proyecto
+    fecha_carga = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))  # Fecha
+    nombre_archivo = Column(String(200), nullable=False)    # Archivo
+    hoja = Column(String(100), nullable=False)              # Hoja
+    mensaje = Column(String(500), nullable=False)           # Mensaje

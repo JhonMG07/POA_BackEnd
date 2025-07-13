@@ -1,4 +1,4 @@
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query
 from fastapi.security import OAuth2PasswordRequestForm
@@ -810,6 +810,15 @@ async def crear_reforma_poa(
     poa = result.scalars().first()
     if not poa:
         raise HTTPException(status_code=404, detail="POA no encontrado")
+    
+    # Inicializar variables para logging
+    codigo_poa = poa.codigo_poa if poa else ""
+    proyecto_nombre = ""
+    if poa and poa.id_proyecto:
+        result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == poa.id_proyecto))
+        proyecto = result.scalars().first()
+        if proyecto:
+            proyecto_nombre = proyecto.titulo
 
     # Validar que el usuario solicitante exista
     result = await db.execute(select(models.Usuario).where(models.Usuario.id_usuario == usuario.id_usuario))
@@ -1057,7 +1066,7 @@ async def transformar_archivo_excel(
     db: AsyncSession = Depends(get_db),
     id_poa: uuid.UUID = Form(...),  # Recibir el ID del POA
     confirmacion: bool = Form(False),  # Confirmación del frontend
-    usurio: models.Usuario = Depends(get_current_user)
+    usuario: models.Usuario = Depends(get_current_user)
 ):
     # Validar que el archivo tenga una extensión válida
     if not file.filename.endswith((".xls", ".xlsx")):
@@ -1069,12 +1078,24 @@ async def transformar_archivo_excel(
     if not poa:
         raise HTTPException(status_code=404, detail="POA no encontrado")
     
+    # Inicializar variables para logging
+    codigo_poa = poa.codigo_poa if poa else ""
+    proyecto_nombre = ""
+    if poa and poa.id_proyecto:
+        result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == poa.id_proyecto))
+        proyecto = result.scalars().first()
+        if proyecto:
+            proyecto_nombre = proyecto.titulo
+
     # Verificar si ya existen actividades asociadas al POA
     result = await db.execute(select(models.Actividad).where(models.Actividad.id_poa == id_poa))
     actividades_existentes = result.scalars().all()
 
     # Leer el contenido del archivo
     contenido = await file.read()
+    # Crear zona horaria UTC-5
+    zona_utc_minus_5 = timezone(timedelta(hours=-5))
+
     try:
         json_result = transformar_excel(contenido, hoja)
 
@@ -1089,13 +1110,17 @@ async def transformar_archivo_excel(
             # Si hay confirmación, eliminar las tareas y actividades asociadas
             await eliminar_tareas_y_actividades(id_poa,db)
 
-            # Registrar log de eliminación
+            # Para log de eliminación
             log_elim = models.LogCargaExcel(
                 id_log=uuid.uuid4(),
-                id_poa=id_poa,
-                id_usuario=usurio.id_usuario,
-                fecha_carga=datetime.now(),
-                mensaje=f"Se eliminaron las actividades , sus tareas y programaciones mensuales asociadas debido a que el usuario decidió reemplazar los datos del POA con un nuevo archivo.",
+                id_poa=str(id_poa),
+                codigo_poa=codigo_poa,
+                id_usuario=str(usuario.id_usuario),
+                usuario_nombre=usuario.nombre_usuario,
+                usuario_email=usuario.email,
+                proyecto_nombre=proyecto_nombre,
+                fecha_carga=datetime.now(zona_utc_minus_5).replace(tzinfo=None),
+                mensaje=f"Se eliminaron las actividades, sus tareas y programaciones mensuales asociadas debido a que el usuario decidió reemplazar los datos del POA con un nuevo archivo.",
                 nombre_archivo=file.filename,
                 hoja=hoja
             )
@@ -1222,9 +1247,13 @@ async def transformar_archivo_excel(
         # Registrar log de carga
         log_crea = models.LogCargaExcel(
             id_log=uuid.uuid4(),
-            id_poa=id_poa,
-            id_usuario=usurio.id_usuario,
-            fecha_carga=datetime.now(),
+            id_poa=str(id_poa),
+            codigo_poa=codigo_poa,
+            id_usuario=str(usuario.id_usuario),
+            usuario_nombre=usuario.nombre_usuario,
+            usuario_email=usuario.email,
+            proyecto_nombre=proyecto_nombre,
+            fecha_carga=datetime.now(zona_utc_minus_5).replace(tzinfo=None),
             # calcula el numero de actividades creadas y se muestra en el mensaje se cargaron ... actividades y sus tareas asociadas desde el archivo {file.filename}."
             mensaje=f"Se cargaron {len(json_result['actividades'])} actividades y sus tareas asociadas desde el archivo {file.filename}.",
             nombre_archivo=file.filename,
@@ -1246,6 +1275,7 @@ async def transformar_archivo_excel(
         raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
+        print(f"Error inesperado en /transformar_excel/: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/item-presupuestario/{id_item}", response_model=schemas.ItemPresupuestarioOut)
@@ -1287,31 +1317,26 @@ async def reporte_poa(
     tipo_proyecto: str = Form(...),
     db: AsyncSession = Depends(get_db)
 ):
-    # se agrega el o los codigos de tipo de proyecto a una lista según el tipo de proyecto 
+    # Determinar códigos de tipo de proyecto
     codigo_tipo: list[str] = []
     if tipo_proyecto == "Investigacion":
-        codigo_tipo.append("PIIF")
-        codigo_tipo.append("PIS")
-        codigo_tipo.append("PIGR")
-        codigo_tipo.append("PIM")
+        codigo_tipo = ["PIIF", "PIS", "PIGR", "PIM"]
     elif tipo_proyecto == "Vinculacion":
-        codigo_tipo.append("PVIF")
+        codigo_tipo = ["PVIF"]
     elif tipo_proyecto == "Transferencia":
-        codigo_tipo.append("PTT")
+        codigo_tipo = ["PTT"]
     else:
         raise HTTPException(status_code=400, detail="Tipo de proyecto no válido")
-    
-    # 1. Buscar los tipos de proyecto según el código_tipo
+
+    # Buscar tipos de proyecto
     result = await db.execute(
         select(models.TipoProyecto)
         .where(models.TipoProyecto.codigo_tipo.in_(codigo_tipo))
     )
-
-    
     tipos_proyecto = result.scalars().all()
     ids_tipo_proyecto = [tp.id_tipo_proyecto for tp in tipos_proyecto]
-    print("ids_tipo_proyecto:", ids_tipo_proyecto)
-    # 2. Buscar proyectos de esos tipos
+
+    # Buscar proyectos de esos tipos
     result = await db.execute(
         select(models.Proyecto)
         .where(models.Proyecto.id_tipo_proyecto.in_(ids_tipo_proyecto))
@@ -1319,7 +1344,7 @@ async def reporte_poa(
     proyectos = result.scalars().all()
     ids_proyecto = [p.id_proyecto for p in proyectos]
 
-    # 3. Buscar POAs de esos proyectos y año
+    # Buscar POAs de esos proyectos y año
     result = await db.execute(
         select(models.Poa)
         .where(
@@ -1330,7 +1355,7 @@ async def reporte_poa(
     poas = result.scalars().all()
     ids_poa = [poa.id_poa for poa in poas]
 
-    # 4. Buscar actividades de esos POAs (total_por_actividad > 0)
+    # Buscar actividades de esos POAs (total_por_actividad > 0)
     result = await db.execute(
         select(models.Actividad)
         .where(
@@ -1339,28 +1364,9 @@ async def reporte_poa(
         )
     )
     actividades = result.scalars().all()
-    # Obtener los id_poa que tienen al menos una actividad válida
-    poas_con_actividades = set(act.id_poa for act in actividades)
+    ids_actividad = [act.id_actividad for act in actividades]
 
-    # Filtrar la lista de poas para solo los que tienen actividades
-    poas_filtrados = [poa for poa in poas if poa.id_poa in poas_con_actividades]
-
-    # Agrupar actividades por descripcion_actividad
-    actividades_dict = {}
-    for act in actividades:
-        desc = act.descripcion_actividad
-        if desc not in actividades_dict:
-            actividades_dict[desc] = {
-                "descripcion_actividad": desc,
-                "total_por_actividad": 0,
-                "ids_actividad": [],
-                "tareas": []
-            }
-        actividades_dict[desc]["total_por_actividad"] += float(act.total_por_actividad)
-        actividades_dict[desc]["ids_actividad"].append(act.id_actividad)
-
-    # 5. Buscar tareas de esas actividades (total > 0)
-    ids_actividad = [id for acts in actividades_dict.values() for id in acts["ids_actividad"]]
+    # Buscar tareas de esas actividades (total > 0)
     result = await db.execute(
         select(models.Tarea)
         .where(
@@ -1370,338 +1376,202 @@ async def reporte_poa(
     )
     tareas = result.scalars().all()
 
-    # Agrupar tareas por id_detalle_tarea dentro de cada actividad
-    from collections import defaultdict
-    for desc, act in actividades_dict.items():
-        tareas_actividad = [t for t in tareas if t.id_actividad in act["ids_actividad"]]
-        tareas_grouped = defaultdict(lambda: {
-            "cantidad": 0, 
-            "total": 0, 
-            "nombres": [], 
-            "id_detalle_tarea": None, 
-            "detalle_descripcion": None,
-            "programacion_mensual": defaultdict(float)
-            })
-        
-        
-        for tarea in tareas_actividad:
-            key = tarea.id_detalle_tarea
-            tareas_grouped[key]["cantidad"] += tarea.cantidad
-            tareas_grouped[key]["total"] += float(tarea.total)
-            tareas_grouped[key]["nombres"].append(tarea.nombre)
-            tareas_grouped[key]["id_detalle_tarea"] = tarea.id_detalle_tarea
-            tareas_grouped[key]["detalle_descripcion"] = tarea.detalle_descripcion
+    # Preparar la lista plana de tareas
+    tareas_lista = []
+    for tarea in tareas:
+        actividad = next((a for a in actividades if a.id_actividad == tarea.id_actividad), None)
+        poa = next((p for p in poas if actividad and p.id_poa == actividad.id_poa), None)
+        proyecto = next((pr for pr in proyectos if poa and pr.id_proyecto == poa.id_proyecto), None)
+        tipo_proyecto_codigo = next((tp.codigo_tipo for tp in tipos_proyecto if proyecto and tp.id_tipo_proyecto == proyecto.id_tipo_proyecto), "") if proyecto else ""
+        presupuesto_aprobado = proyecto.presupuesto_aprobado if proyecto else 0
 
-            # Obtener la programación mensual de esta tarea
-            result_prog = await db.execute(
-                select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_tarea == tarea.id_tarea)
-            )
-            programaciones = result_prog.scalars().all()
-            for prog in programaciones:
-                mes = prog.mes
-                valor = float(prog.valor)
-                tareas_grouped[key]["programacion_mensual"][mes] += valor
-
-
-        # Numerar las tareas agrupadas (1.1, 1.2, ...)
-        tareas_final = []
-        for idx, (id_detalle, datos) in enumerate(tareas_grouped.items(), start=1):
-            # Buscar el item presupuestario
+        # Item presupuestario
+        result = await db.execute(
+            select(models.DetalleTarea).where(models.DetalleTarea.id_detalle_tarea == tarea.id_detalle_tarea)
+        )
+        detalle = result.scalars().first()
+        item_presupuestario = None
+        if detalle:
             result = await db.execute(
-                select(models.DetalleTarea).where(models.DetalleTarea.id_detalle_tarea == id_detalle)
+                select(models.ItemPresupuestario).where(models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario)
             )
-            detalle = result.scalars().first()
-            item_presupuestario = None
-            if detalle:
-                result = await db.execute(
-                    select(models.ItemPresupuestario).where(models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario)
-                )
-                item = result.scalars().first()
-                if item:
-                    item_presupuestario = item.codigo
-            # Limpiar el nombre original quitando cualquier prefijo tipo "1.3 ", "4.1 ", etc.
-            nombre_original = datos['nombres'][0]
-            nombre_limpio = re.sub(r"^\d+(\.\d+)?\s+", "", nombre_original).strip()
-            # Extraer el número de la actividad del texto, por ejemplo "(4) ..."
-            
-            match_num = re.match(r"\((\d+)\)", desc.strip())
-            if match_num:
-                num_actividad = match_num.group(1)
-            else:
-                num_actividad = str(list(actividades_dict.keys()).index(desc)+1)
+            item = result.scalars().first()
+            if item:
+                item_presupuestario = item.codigo
 
-            nombre_tarea = f"{num_actividad}.{idx} {nombre_limpio}"
-            # Convertir programacion_mensual a dict simple
-            prog_mensual_dict = {mes: round(valor, 2) for mes, valor in datos["programacion_mensual"].items()}
+        # Programación mensual
+        result_prog = await db.execute(
+            select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_tarea == tarea.id_tarea)
+        )
+        programaciones = result_prog.scalars().all()
+        prog_mensual_dict = {prog.mes: round(float(prog.valor), 2) for prog in programaciones}
 
-            tareas_final.append({
-                "nombre": nombre_tarea,
-                "item_presupuestario": item_presupuestario,
-                "cantidad": datos["cantidad"],
-                "total": datos["total"],
-                "programacion_mensual": prog_mensual_dict 
-            })
-        act["tareas"] = tareas_final
+        tareas_lista.append({
+            "anio_poa": poa.anio_ejecucion if poa else "",
+            "codigo_proyecto": proyecto.codigo_proyecto if proyecto else "",
+            "tipo_proyecto": tipo_proyecto_codigo,
+            "presupuesto_aprobado": float(presupuesto_aprobado) if presupuesto_aprobado else 0,
+            "nombre": tarea.nombre,
+            "detalle_descripcion": tarea.detalle_descripcion,  # NUEVO CAMPO
+            "item_presupuestario": item_presupuestario,
+            "cantidad": tarea.cantidad,
+            "precio_unitario": float(tarea.precio_unitario),
+            "total": float(tarea.total),
+            "programacion_mensual": prog_mensual_dict
+        })
 
-    # Agrupar POAs por codigo_tipo SOLO usando poas_filtrados
-    poas_por_tipo = {}
-    for tp in tipos_proyecto:
-        poas_tp = [
-            poa for poa in poas_filtrados
-            if any(
-                p.id_proyecto == poa.id_proyecto and p.id_tipo_proyecto == tp.id_tipo_proyecto
-                for p in proyectos
-            )
-        ]
-        if poas_tp:
-            poas_por_tipo[tp.codigo_tipo] = {
-                "nombre": tp.nombre,
-                "cantidad_poas": len(poas_tp)
-            }
+    return tareas_lista
 
-    # Al final, antes de armar el JSON:
-    def extraer_numero_actividad(desc):
-        match = re.match(r"\((\d+)\)", desc.strip())
-        return int(match.group(1)) if match else 9999  # 9999 para los que no tengan número
-    
-    # Eliminar 'ids_actividad' de cada actividad antes de devolver el JSON
-    for act in actividades_dict.values():
-        if "ids_actividad" in act:
-            del act["ids_actividad"]
-
-    actividades_ordenadas = sorted(
-        actividades_dict.values(),
-        key=lambda act: extraer_numero_actividad(act["descripcion_actividad"])
-    ) 
-    total_general = sum(act["total_por_actividad"] for act in actividades_ordenadas)
-    tipo_proyecto_legible = {
-        "Investigacion": "Proyecto de Investigación",
-        "Vinculacion": "Proyecto de Vinculación",
-        "Transferencia": "Proyecto de Transferencia"
-    }.get(tipo_proyecto, tipo_proyecto)
-    # Armar el JSON final
-    reporte = {
-        "anio": anio,
-        "tipo_proyecto": tipo_proyecto_legible,
-        "numero_poas": len(poas_filtrados), 
-        "total_general": total_general,
-        "tipos_proyecto_encontrados": [
-            {
-                "codigo_tipo": codigo,
-                "nombre": datos["nombre"],
-                "cantidad_poas": datos["cantidad_poas"]
-            }
-            for codigo, datos in poas_por_tipo.items()
-        ],
-        "actividades": actividades_ordenadas
-    }
-    return reporte
 
 @app.post("/reporte-poa/excel/")
 async def descargar_excel(
-    reporte: dict = Body(...)
+    reporte: list = Body(...)
 ):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     worksheet = workbook.add_worksheet("Reporte POA")
-    worksheet.set_column(0, 0, 62.33)  # Columna A (Actividad o Tarea), ancho 40
-    worksheet.set_column(1, 1, 22)  # Columna B (Item Presupuestario), ancho 22
-    worksheet.set_column(2, 2, 13.50)  # Columna C (Cantidad), ancho 10
-    worksheet.set_column(3, 3, 9)  # Columna D (Total Tarea), ancho 15
 
     # Formatos
-    bold = workbook.add_format({'bold': True,'align': 'center', 'valign': 'vcenter'})
-    header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1})
-    subheader = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
-    border = workbook.add_format({'border': 1})
-    bold_wrap = workbook.add_format({'bold': True, 'text_wrap': True,'align': 'center', 'valign': 'vcenter'})
-    
-    row = 0
+    header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    centro = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    moneda = workbook.add_format({'num_format': '"$"#,##0.00', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    texto = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
 
-    # Encabezados generales
-    worksheet.write(row, 0, f"Año: {reporte['anio']}",bold)
-    row += 1
-    worksheet.write(row, 0, f"Tipo de Proyecto: {reporte['tipo_proyecto']}",bold)
-    row += 1
-    worksheet.write(row, 0, f"total de poas: {reporte['numero_poas']}",bold)
-    row += 1
-    worksheet.write(row, 0, f"total general: ${reporte['total_general']:.2f}", bold)
-    row += 2
-
-    
-
-    # Tipos de proyecto encontrados
-    worksheet.merge_range(row, 0, row, 2, "tipos_proyecto_encontrados", bold)
-    row += 1
-    worksheet.write_row(row, 0, ["codigo_tipo", "nombre", "cantidad de poas"], header)
-    row += 1
-    for tipo in reporte["tipos_proyecto_encontrados"]:
-        worksheet.write_row(row, 0, [
-            tipo["codigo_tipo"],
-            tipo["nombre"],
-            tipo["cantidad_poas"]
-        ], border)
-        row += 1
-
-    row += 2
-
-    # --- Detectar todos los meses presentes en todas las tareas ---
+    # Detectar todos los meses presentes en todas las tareas
     meses_presentes = set()
-    for actividad in reporte["actividades"]:
-        for tarea in actividad["tareas"]:
-            meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
-    # Ordenar meses según el año fiscal ecuatoriano
+    for tarea in reporte:
+        meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
     meses_orden = [
         "enero", "febrero", "marzo", "abril", "mayo", "junio",
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
     ]
-    meses_final = [m for m in meses_orden if m in meses_presentes]
+    meses_final = meses_orden
 
+    # Cabecera
+    cabecera = [
+        "AÑO POA", "CODIGO PROYECTO", "Tipo de Proyecto", "Presupuesto Aprobado", "Tarea",
+        "Detalle Descripción",  # NUEVA COLUMNA
+        "Item Presupuestario", "Cantidad", "Precio Unitario", "Total Tarea"
+    ] + [m.capitalize() for m in meses_final]
+    worksheet.write_row(0, 0, cabecera, header)
 
-    # --- ACTIVIDADES Y TAREAS ---
-    for actividad in reporte["actividades"]:
-        worksheet.merge_range(row, 0, row, 3 + len(meses_final), f"Actividad: {actividad['descripcion_actividad']}", bold_wrap)
-        row += 1
-        # Cabecera dinámica
-        cabecera = ["Tarea", "Item Presupuestario", "Cantidad", "Total Tarea"] + [m.capitalize() for m in meses_final]
-        worksheet.write_row(row, 0, cabecera, subheader)
-        row += 1
-        for tarea in actividad["tareas"]:
-            fila = [
-                tarea["nombre"],
-                tarea["item_presupuestario"],
-                tarea["cantidad"],
-                f"${tarea['total']:.2f}"  # <-- Formato dinero
-            ]
-            # Agregar valores de cada mes en el orden correcto
-            for mes in meses_final:
-                valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
-                fila.append(f"${valor_mes:.2f}")  # <-- Formato dinero
-            worksheet.write_row(row, 0, fila, border)
-            row += 1
-        row += 1  # Espacio entre actividades
+    # Ajustar anchos de columna
+    worksheet.set_column(0, 0, 10)   # Año POA
+    worksheet.set_column(1, 1, 15)   # Código Proyecto
+    worksheet.set_column(2, 2, 15)   # Tipo de Proyecto
+    worksheet.set_column(3, 3, 18)   # Presupuesto Aprobado
+    worksheet.set_column(4, 4, 45)   # Tarea
+    worksheet.set_column(5, 5, 45)   # Detalle Descripción  # NUEVA COLUMNA
+    worksheet.set_column(6, 6, 16)   # Item Presupuestario
+    worksheet.set_column(7, 7, 8)    # Cantidad
+    worksheet.set_column(8, 8, 12)   # Precio Unitario
+    worksheet.set_column(9, 9, 12)   # Total Tarea
+    worksheet.set_column(10, 10 + len(meses_final) - 1, 11)  # Meses
 
-    # --- RESUMEN MENSUAL ---
-    # Sumar todos los valores de cada mes de todas las tareas
-    resumen_mensual = {mes: 0 for mes in meses_final}
-    for actividad in reporte["actividades"]:
-        for tarea in actividad["tareas"]:
-            for mes in meses_final:
-                resumen_mensual[mes] += tarea.get("programacion_mensual", {}).get(mes, 0)
+    # Filas de tareas
+    for row, tarea in enumerate(reporte, start=1):
+        worksheet.write(row, 0, tarea["anio_poa"], centro)
+        worksheet.write(row, 1, tarea["codigo_proyecto"], centro)
+        worksheet.write(row, 2, tarea["tipo_proyecto"], centro)
+        worksheet.write_number(row, 3, tarea["presupuesto_aprobado"], moneda)
+        worksheet.write(row, 4, tarea["nombre"], texto)
+        worksheet.write(row, 5, tarea["detalle_descripcion"], texto)  # NUEVA COLUMNA
+        worksheet.write(row, 6, tarea["item_presupuestario"], centro)
+        worksheet.write_number(row, 7, tarea["cantidad"], centro)
+        worksheet.write_number(row, 8, tarea["precio_unitario"], moneda)
+        worksheet.write_number(row, 9, tarea["total"], moneda)
+        for col, mes in enumerate(meses_final, start=10):
+            valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
+            worksheet.write_number(row, col, valor_mes, moneda)
 
-    # Escribir resumen mensual
-    row += 1
-    worksheet.write(row, 0, "RESUMEN MENSUAL", bold)
-    row += 1
-    worksheet.write_row(row, 0, [m.capitalize() for m in meses_final], header)
-    row += 1
-    worksheet.write_row(row, 0, [f"${round(resumen_mensual[mes], 2):.2f}" for mes in meses_final], border)
+    # Agregar fecha de descarga al final
+    zona_utc_minus_5 = timezone(timedelta(hours=-5))
+    fecha_descarga = datetime.now(zona_utc_minus_5).strftime("%d/%m/%Y %H:%M")
+    fila_fecha = len(reporte) + 2
+    worksheet.write(fila_fecha, 0, "Fecha de descarga:", centro)
+    worksheet.write(fila_fecha, 1, fecha_descarga, centro)
     workbook.close()
     output.seek(0)
-
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=reporte-poa.xlsx"}
-    )
+    )             
 
 @app.post("/reporte-poa/pdf/")
 async def descargar_pdf(
-    reporte: dict = Body(...)
+    reporte: list = Body(...)
 ):
     output = io.BytesIO()
-    custom_size = (1500, 900)  # ancho x alto en puntos
+    custom_size = (1700, 900)  # ancho x alto en puntos
 
     doc = SimpleDocTemplate(output, pagesize=custom_size)
     elements = []
-    styles = getSampleStyleSheet()
-    styleN = styles["Normal"]
-    styleH = styles["Heading2"]
-    style_cell = ParagraphStyle('cell', fontSize=9, leading=11)  # Puedes ajustar el tamaño
+    style_cell = ParagraphStyle('cell', fontSize=9, leading=11, alignment=1)  # Centrado
+    style_left = ParagraphStyle('leftcell', fontSize=9, leading=11, alignment=0)  # Izquierda
 
-    # Encabezados generales
-    elements.append(Paragraph(f"<b>Año:</b> {reporte['anio']}", styleN))
-    elements.append(Paragraph(f"<b>Tipo de Proyecto:</b> {reporte['tipo_proyecto']}", styleN))
-    elements.append(Paragraph(f"<b>Total de POAs:</b> {reporte['numero_poas']}", styleN))
-    elements.append(Paragraph(f"<b>Total general:</b> ${reporte['total_general']:.2f}", styleN))
-    elements.append(Spacer(1, 12))
-
-    # Tipos de proyecto encontrados
-    elements.append(Paragraph("Tipos de proyecto encontrados", styleH))
-    data = [["Código Tipo", "Nombre", "Cantidad de POAs"]]
-    for tipo in reporte["tipos_proyecto_encontrados"]:
-        data.append([tipo["codigo_tipo"], tipo["nombre"], tipo["cantidad_poas"]])
-    table = Table(data, hAlign='LEFT')
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold')
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 16))
-
-    # --- Detectar todos los meses presentes en todas las tareas ---
+    # Detectar todos los meses presentes en todas las tareas
     meses_presentes = set()
-    for actividad in reporte["actividades"]:
-        for tarea in actividad["tareas"]:
-            meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
+    for tarea in reporte:
+        meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
     meses_orden = [
         "enero", "febrero", "marzo", "abril", "mayo", "junio",
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
     ]
-    meses_final = [m for m in meses_orden if m in meses_presentes]
+    meses_final = meses_orden
 
+    # Cabecera
+    cabecera = [
+        Paragraph("<b>AÑO POA</b>", style_cell),
+        Paragraph("<b>CODIGO PROYECTO</b>", style_cell),
+        Paragraph("<b>Tipo de Proyecto</b>", style_cell),
+        Paragraph("<b>Presupuesto Aprobado</b>", style_cell),
+        Paragraph("<b>Tarea</b>", style_left),
+        Paragraph("<b>Detalle Descripción</b>", style_left),  # NUEVA COLUMNA
+        Paragraph("<b>Item Presupuestario</b>", style_cell),
+        Paragraph("<b>Cantidad</b>", style_cell),
+        Paragraph("<b>Precio Unitario</b>", style_cell),
+        Paragraph("<b>Total Tarea</b>", style_cell)
+    ] + [Paragraph(f"<b>{m.capitalize()}</b>", style_cell) for m in meses_final]
+    data = [cabecera]
 
-    # Actividades y tareas
-    for actividad in reporte["actividades"]:
-        elements.append(Paragraph(f"<b>Actividad: {actividad['descripcion_actividad']}</b>", styleN))
-        # Cabecera dinámica
-        cabecera = [
-            Paragraph("<b>Tarea</b>", style_cell),
-            Paragraph("<b>Item Presupuestario</b>", style_cell),
-            Paragraph("<b>Cantidad</b>", style_cell),
-            Paragraph("<b>Total Tarea</b>", style_cell)
-        ] + [Paragraph(f"<b>{m.capitalize()}</b>", style_cell) for m in meses_final]
-        data = [cabecera]
-        for tarea in actividad["tareas"]:
-            fila = [
-                Paragraph(str(tarea["nombre"]), style_cell),
-                Paragraph(str(tarea["item_presupuestario"]), style_cell),
-                Paragraph(str(tarea["cantidad"]), style_cell),
-                Paragraph(f"${tarea['total']:.2f}", style_cell)  # <-- Formato dinero
-            ]
-            for mes in meses_final:    
-                valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
-                fila.append(Paragraph(f"${valor_mes:.2f}", style_cell))  # <-- Formato dinero
-            data.append(fila)
-            
-        table = Table(data, hAlign='LEFT', colWidths=[180, 80, 60, 60] + [50]*len(meses_final))
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
-            ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 12))
+    # Filas de tareas
+    for tarea in reporte:
+        fila = [
+            Paragraph(str(tarea["anio_poa"]), style_cell),
+            Paragraph(str(tarea["codigo_proyecto"]), style_cell),
+            Paragraph(str(tarea["tipo_proyecto"]), style_cell),
+            Paragraph(f"${tarea['presupuesto_aprobado']:.2f}", style_cell),
+            Paragraph(str(tarea["nombre"]), style_left),
+            Paragraph(str(tarea["detalle_descripcion"]), style_left),  # NUEVA COLUMNA
+            Paragraph(str(tarea["item_presupuestario"]), style_cell),
+            Paragraph(str(tarea["cantidad"]), style_cell),
+            Paragraph(f"${tarea['precio_unitario']:.2f}", style_cell),
+            Paragraph(f"${tarea['total']:.2f}", style_cell)
+        ]
+        for mes in meses_final:
+            valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
+            fila.append(Paragraph(f"${valor_mes:.2f}", style_cell))
+        data.append(fila)
 
-    # --- RESUMEN MENSUAL ---
-    resumen_mensual = {mes: 0 for mes in meses_final}
-    for actividad in reporte["actividades"]:
-        for tarea in actividad["tareas"]:
-            for mes in meses_final:
-                resumen_mensual[mes] += tarea.get("programacion_mensual", {}).get(mes, 0)
-
-    elements.append(Paragraph("<b>RESUMEN MENSUAL</b>", styleH))
-    resumen_data = [[Paragraph(m.capitalize(), style_cell) for m in meses_final]]
-    resumen_data.append([Paragraph(f"${round(resumen_mensual[mes], 2):.2f}", style_cell) for mes in meses_final])
-    resumen_table = Table(resumen_data, hAlign='LEFT', colWidths=[50]*len(meses_final))
-    resumen_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+    # Definir anchos de columna (igual que Excel)
+    col_widths = [60, 90, 90, 90, 250, 250, 80, 60, 80, 80] + [60]*len(meses_final)  # Ajustar ancho para nueva columna
+    table = Table(data, hAlign='LEFT', colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#D9D9D9")),
         ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('ALIGN', (4,1), (4,-1), 'LEFT'),  # Columna "Tarea" alineada a la izquierda
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
-    elements.append(resumen_table)
+    elements.append(table)
+
+    # Fecha de descarga al final
+    zona_utc_minus_5 = timezone(timedelta(hours=-5))
+    fecha_descarga = datetime.datetime.now(zona_utc_minus_5).strftime("%d/%m/%Y %H:%M")
+    elements.append(Spacer(1, 18))
+    elements.append(Paragraph(f"<b>Fecha de descarga:</b> {fecha_descarga}", style_left))
 
     doc.build(elements)
     output.seek(0)
@@ -1716,19 +1586,11 @@ async def obtener_logs_carga_excel(
     db: AsyncSession = Depends(get_db),
     fecha_inicio: str = Query(None),
     fecha_fin: str = Query(None),
+    usuario: models.Usuario = Depends(get_current_user)
 ):
     try:
-        query = (
-            select(models.LogCargaExcel)
-            .options(
-                selectinload(models.LogCargaExcel.usuario),
-                selectinload(models.LogCargaExcel.poa).selectinload(models.Poa.proyecto)
-            )
-            .join(models.Usuario)
-            .join(models.Poa)
-            .join(models.Proyecto)
-        )
-        # Validar formato de fecha y convertir a datetime
+        query = select(models.LogCargaExcel)
+        # Filtros de fecha
         if fecha_inicio:
             try:
                 fecha_inicio_dt = datetime.strptime(fecha_inicio, "%Y-%m-%d")
@@ -1737,10 +1599,8 @@ async def obtener_logs_carga_excel(
                 return JSONResponse(content=[], status_code=200)
         if fecha_fin:
             try:
-                fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d")
-                # Para incluir todo el día de la fecha_fin, sumamos 1 día y restamos 1 segundo
                 from datetime import timedelta
-                fecha_fin_dt = fecha_fin_dt + timedelta(days=1) - timedelta(seconds=1)
+                fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
                 query = query.where(models.LogCargaExcel.fecha_carga <= fecha_fin_dt)
             except ValueError:
                 return JSONResponse(content=[], status_code=200)
@@ -1753,21 +1613,20 @@ async def obtener_logs_carga_excel(
         for log in logs:
             respuesta.append({
                 "fecha_carga": log.fecha_carga.strftime("%Y-%m-%d %H:%M:%S"),
-                "usuario": log.usuario.nombre_usuario if log.usuario else "",
-                "correo_usuario": log.usuario.email if log.usuario else "",
-                "mensaje": log.mensaje,
-                "nombre_archivo": log.nombre_archivo,
-                "hoja": log.hoja,
-                "codigo_poa": log.poa.codigo_poa if log.poa else "",
-                "proyecto": log.poa.proyecto.titulo if log.poa and log.poa.proyecto else ""
+                "usuario": log.usuario_nombre or "",
+                "correo_usuario": log.usuario_email or "",
+                "proyecto": log.proyecto_nombre or "",
+                "codigo_poa": log.codigo_poa or "",
+                "nombre_archivo": log.nombre_archivo or "",
+                "hoja": log.hoja or "",
+                "mensaje": log.mensaje or ""
             })
         return respuesta
     except Exception as e:
         print("Error en logs-carga-excel:", e)
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
+    
 # programacion mensual
-
 @app.post("/programacion-mensual", response_model=schemas.ProgramacionMensualOut)
 async def crear_programacion_mensual(
     data: schemas.ProgramacionMensualCreate,
