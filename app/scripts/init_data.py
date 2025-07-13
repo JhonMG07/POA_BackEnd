@@ -249,14 +249,14 @@ async def seed_all_data():
             db.add(limite)
             await db.commit()
 
-    # ─────────────────────────────────────────────────────────────────────────────
+     # ─────────────────────────────────────────────────────────────────────────────
     # Insertar en ITEM_PRESUPUESTARIO (permitiendo duplicidad de código con distintas descripciones)
     # ─────────────────────────────────────────────────────────────────────────────
 
     # Verificar que todos los ítems presupuestarios tengan asignada una tarea
     # nombre: PIM; PTT; PVIF (resto de POA's)
     items_codigo = [
-        {"codigo": "730606", "nombre": "1.1; 1.1; 1.1", "descripcion": "Codigo único"},
+        {"codigo": "730606", "nombre": "(1.1, 1.2, 1.3, 1.4); (1.1, 1.2, 1.3, 1.4); (1.1, 1.2, 1.3, 1.4)", "descripcion": "Aplica en 4 tareas del mismo POA"},
         {"codigo": "710502", "nombre": "2.1; 0; 2.1", "descripcion": "Codigo único"},
         {"codigo": "710601", "nombre": "2.2; 0; 2.2", "descripcion": "Codigo único"},
         {"codigo": "840107", "nombre": "3.1; 7.1; 3.1", "descripcion": "Depende de una condición"},
@@ -268,12 +268,12 @@ async def seed_all_data():
         {"codigo": "730204", "nombre": "6.1; 4.1; 6.1", "descripcion": "Codigo único"},
         {"codigo": "730612", "nombre": "7.1; 0; 7.1", "descripcion": "Codigo único"},
         {"codigo": "730303", "nombre": "8.1; 5.1; 8.1", "descripcion": "Codigo único"},
-        {"codigo": "730301", "nombre": "(8.2 8.3); 5.2; 8.2", "descripcion": "Aplica en 2 tareas del mismo POA"},
+        {"codigo": "730301", "nombre": "(8.2, 8.3); (5.2, 5.3); (8.2, 8.3)", "descripcion": "Aplica en 2 tareas del mismo POA"},
         {"codigo": "730609", "nombre": "9.1; 0; 0", "descripcion": "Codigo único"},
         {"codigo": "840109", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
         {"codigo": "731409", "nombre": "10.1; 0; 0", "descripcion": "Depende de una condición"},
         {"codigo": "730304", "nombre": "11.1; 0; 0", "descripcion": "Codigo único"},
-        {"codigo": "730302", "nombre": "(11.2 11.3 12.1); 0; 0", "descripcion": "Aplica en 3 tareas del mismo POA"},
+        {"codigo": "730302", "nombre": "(11.2, 11.3, 12.1); 0; 0", "descripcion": "Aplica en 3 tareas del mismo POA"},
         {"codigo": "730307", "nombre": "12.2; 0; 0", "descripcion": "Codigo único"},
         {"codigo": "770102", "nombre": "0; 8.1; 0", "descripcion": "Codigo único"},
         {"codigo": "730601", "nombre": "0; 6.1; 0", "descripcion": "Codigo único"},
@@ -310,196 +310,316 @@ async def seed_all_data():
         print("Todos los ítems presupuestarios ya existen con su descripción.")
 
     # ─────────────────────────────────────────────────────────────────────────────
-    # Insertar DETALLE_TAREA asociados a los ITEM_PRESUPUESTARIO ya existentes
+    # Insertar DETALLE_TAREA y asociaciones usando items_codigo como fuente única
     # ─────────────────────────────────────────────────────────────────────────────
 
-    detalles = [
-        # Detalles para PIM
+    # Mapear los códigos reales de TipoPOA
+    tipos_poa_map = {}
+    codigos_tipo = ["PIM", "PTT", "PVIF", "PIIF", "PIS", "PIGR", "PVIS"]
+
+    for codigo in codigos_tipo:
+        result = await db.execute(select(TipoPOA).where(TipoPOA.codigo_tipo == codigo))
+        tipo_poa = result.scalars().first()
+        if tipo_poa:
+            tipos_poa_map[codigo] = tipo_poa
+        else:
+            print(f"⚠️ No se encontró TipoPOA con código: {codigo}")
+
+    # Definir los detalles de tarea con sus asociaciones específicas
+    detalles_con_asociaciones = [
+        # Código 730606 - Contratación de servicios profesionales (4 detalles diferentes)
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Asistente de investigación",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "1.1; 1.1; 1.1",
+            "asociaciones": {
+                "PIM": ["1.1"], "PTT": ["1.1"], "PVIF": ["1.1"], "PVIS": ["1.1"], "PIGR": ["1.1"], "PIS": ["1.1"], "PIIF": ["1.1"]
+            }
         },
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 1",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "1.2; 1.2; 1.2",
+            "asociaciones": {
+                "PIM": ["1.2"], "PTT": ["1.2"], "PVIF": ["1.2"], "PVIS": ["1.2"], "PIGR": ["1.2"], "PIS": ["1.2"], "PIIF": ["1.2"]
+            }
         },
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 2",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "1.3; 1.3; 1.3",
+            "asociaciones": {
+                "PIM": ["1.3"], "PTT": ["1.3"], "PVIF": ["1.3"], "PVIS": ["1.3"], "PIGR": ["1.3"], "PIS": ["1.3"], "PIIF": ["1.3"]
+            }
         },
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 3",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "1.4; 1.4; 1.4",
+            "asociaciones": {
+                "PIM": ["1.4"], "PTT": ["1.4"], "PVIF": ["1.4"], "PVIS": ["1.4"], "PIGR": ["1.4"], "PIS": ["1.4"], "PIIF": ["1.4"]
+            }
         },
+        # Código 710502 - Ayudantes RMU
         {
             "codigo": "710502",
             "nombre": "Contratación de ayudantes de investigación RMU",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "2.1; 0; 2.1",
+            "asociaciones": {
+                "PIM": ["2.1"], "PVIF": ["2.1"], "PVIS": ["2.1"], "PIGR": ["2.1"], "PIS": ["2.1"], "PIIF": ["2.1"]
+            }
         },
+        # Código 710601 - Ayudantes IESS
         {
             "codigo": "710601",
             "nombre": "Contratación de ayudantes de investigación IESS",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "2.2; 0; 2.2",
+            "asociaciones": {
+                "PIM": ["2.2"], "PVIF": ["2.2"], "PVIS": ["2.2"], "PIGR": ["2.2"], "PIS": ["2.2"], "PIIF": ["2.2"]
+            }
         },
-        # Casos #ojo - equipos informáticos (dos códigos alternativos)
+        # Códigos 840107 y 731407 - Equipos informáticos (alternativas)
         {
             "codigo": "840107",
             "nombre": "Adquisición de equipos informáticos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "3.1; 7.1; 3.1",
+            "asociaciones": {
+                "PIM": ["3.1"], "PTT": ["7.1"], "PVIF": ["3.1"], "PVIS": ["3.1"], "PIGR": ["3.1"], "PIS": ["3.1"], "PIIF": ["3.1"]
+            }
         },
         {
             "codigo": "731407",
-            "nombre": "Adquisición de equipos informáticos", 
+            "nombre": "Adquisición de equipos informáticos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "3.1; 7.1; 3.1",
+            "asociaciones": {
+                "PIM": ["3.1"], "PTT": ["7.1"], "PVIF": ["3.1"], "PVIS": ["3.1"], "PIGR": ["3.1"], "PIS": ["3.1"], "PIIF": ["3.1"]
+            }
         },
-        # Casos #ojo - equipos especializados (dos códigos alternativos)
+        # Códigos 840104 y 731404 - Equipos especializados (alternativas)
         {
             "codigo": "840104",
             "nombre": "Adquisición de equipos especializados y maquinaria",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "4.1; 2.1; 4.1",
+            "asociaciones": {
+                "PIM": ["4.1"], "PTT": ["2.1"], "PVIF": ["4.1"], "PVIS": ["4.1"], "PIGR": ["4.1"], "PIS": ["4.1"], "PIIF": ["4.1"]
+            }
         },
         {
             "codigo": "731404",
             "nombre": "Adquisición de equipos especializados y maquinaria",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "4.1; 2.1; 4.1",
+            "asociaciones": {
+                "PIM": ["4.1"], "PTT": ["2.1"], "PVIF": ["4.1"], "PVIS": ["4.1"], "PIGR": ["4.1"], "PIS": ["4.1"], "PIIF": ["4.1"]
+            }
         },
+        # Código 730829 - Insumos
         {
             "codigo": "730829",
             "nombre": "Adquisición de insumos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "5.1; 3.1; 5.1",
+            "asociaciones": {
+                "PIM": ["5.1"], "PTT": ["3.1"], "PVIF": ["5.1"], "PVIS": ["5.1"], "PIGR": ["5.1"], "PIS": ["5.1"], "PIIF": ["5.1"]
+            }
         },
+        # Código 730819 - Reactivos
         {
             "codigo": "730819",
             "nombre": "Adquisición de reactivos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "5.2; 0; 5.2",
+            "asociaciones": {
+                "PIM": ["5.2"], "PVIF": ["5.2"], "PVIS": ["5.2"], "PIGR": ["5.2"], "PIS": ["5.2"], "PIIF": ["5.2"]
+            }
         },
+        # Código 730204 - Publicaciones (solo PIM)
         {
             "codigo": "730204",
             "nombre": "Solicitud de autorización para el pago de publicaciones",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "6.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["6.1"]
+            }
         },
+        # Código 730204 - Impresión 3D (solo PTT)
+        {
+            "codigo": "730204",
+            "nombre": "Servicio de edición, impresión y reproducción (Impresión 3D)",
+            "descripcion": "",
+            "características": "0; 4.1; 0",
+            "asociaciones": {
+                "PTT": ["4.1"]
+            }
+        },
+        # Código 730204 - Copias (resto de POAs)
+        {
+            "codigo": "730204",
+            "nombre": "Servicio de edición, impresión y reproducción (copias)",
+            "descripcion": "",
+            "características": "0; 0; 6.1",
+            "asociaciones": {
+                "PVIF": ["6.1"], "PVIS": ["6.1"], "PIGR": ["6.1"], "PIS": ["6.1"], "PIIF": ["6.1"]
+            }
+        },
+        # Código 730612 - Eventos académicos
         {
             "codigo": "730612",
             "nombre": "Solicitud de pago de inscripción para participación en eventos académicos",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "7.1; 0; 7.1",
+            "asociaciones": {
+                "PIM": ["7.1"], "PVIF": ["7.1"], "PVIS": ["7.1"], "PIGR": ["7.1"], "PIS": ["7.1"], "PIIF": ["7.1"]
+            }
         },
+        # Código 730303 - Viáticos interior
         {
             "codigo": "730303",
             "nombre": "Viáticos al interior",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "8.1; 5.1; 8.1",
+            "asociaciones": {
+                "PIM": ["8.1"], "PTT": ["5.1"], "PVIF": ["8.1"], "PVIS": ["8.1"], "PIGR": ["8.1"], "PIS": ["8.1"], "PIIF": ["8.1"]
+            }
         },
+        # Código 730301 - Pasajes aéreos interior
         {
             "codigo": "730301",
             "nombre": "Pasajes aéreos al interior",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "8.2; 5.2; 8.2",
+            "asociaciones": {
+                "PIM": ["8.2"], "PTT": ["5.2"], "PVIF": ["8.2"], "PVIS": ["8.2"], "PIGR": ["8.2"], "PIS": ["8.2"], "PIIF": ["8.2"]
+            }
         },
+        # Código 730301 - Movilización interior
         {
             "codigo": "730301",
             "nombre": "Movilización al interior",
             "descripcion": "",
-            "tipos_poa": ["PIM", "PTT", "PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "8.3; 5.3; 8.3",
+            "asociaciones": {
+                "PIM": ["8.3"], "PTT": ["5.3"], "PVIF": ["8.3"], "PVIS": ["8.3"], "PIGR": ["8.3"], "PIS": ["8.3"], "PIIF": ["8.3"]
+            }
         },
+        # Código 730609 - Análisis laboratorios (solo PIM)
         {
             "codigo": "730609",
             "nombre": "Análisis de laboratorios",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "9.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["9.1"]
+            }
         },
-        # Casos #ojo - literatura especializada
+        # Códigos 840109 y 731409 - Literatura especializada (alternativas, solo PIM)
         {
             "codigo": "840109",
             "nombre": "Adquisición de literatura especializada",
             "descripcion": "(valor mas de 100 y durabilidad)",
-            "tipos_poa": ["PIM"]
+            "características": "10.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["10.1"]
+            }
         },
         {
             "codigo": "731409",
             "nombre": "Adquisición de literatura especializada",
             "descripcion": "(valor mas de 100 y durabilidad)",
-            "tipos_poa": ["PIM"]
+            "características": "10.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["10.1"]
+            }
         },
-        # Detalles específicos para PIM
+        # Código 730304 - Viáticos exterior (solo PIM)
         {
             "codigo": "730304",
             "nombre": "Viáticos al exterior",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "11.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["11.1"]
+            }
         },
+        # Código 730302 - Pasajes aéreos exterior (solo PIM)
         {
             "codigo": "730302",
             "nombre": "Pasajes aéreos al exterior",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "11.2; 0; 0",
+            "asociaciones": {
+                "PIM": ["11.2"]
+            }
         },
+        # Código 730302 - Movilización exterior (solo PIM)
         {
             "codigo": "730302",
             "nombre": "Movilización al exterior",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "11.3; 0; 0",
+            "asociaciones": {
+                "PIM": ["11.3"]
+            }
         },
+        # Código 730302 - Pasajes delegados (solo PIM)
         {
             "codigo": "730302",
             "nombre": "Pasajes aéreos para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "12.1; 0; 0",
+            "asociaciones": {
+                "PIM": ["12.1"]
+            }
         },
+        # Código 730307 - Hospedaje delegados (solo PIM)
         {
             "codigo": "730307",
             "nombre": "Servicio de hospedaje y alimentación para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
-            "tipos_poa": ["PIM"]
+            "características": "12.2; 0; 0",
+            "asociaciones": {
+                "PIM": ["12.2"]
+            }
         },
-        # Detalles específicos para PTT
-        {
-            "codigo": "730204",
-            "nombre": "Servicio de edición, impresión y reproducción (Impresión 3D)",
-            "descripcion": "",
-            "tipos_poa": ["PTT"]
-        },
+        # Código 730601 - Servicios técnicos (solo PTT)
         {
             "codigo": "730601",
             "nombre": "Contratación de servicios técnicos especializados para la elaboración de diseño, construcción, implementación, seguimiento y mejora contínua de los prototipos",
             "descripcion": "Contratación de servicios técnicos especializados (Consultoría), para la adquisición de muestras de campo",
-            "tipos_poa": ["PTT"]
+            "características": "0; 6.1; 0",
+            "asociaciones": {
+                "PTT": ["6.1"]
+            }
         },
+        # Código 770102 - Propiedad intelectual (solo PTT)
         {
             "codigo": "770102",
             "nombre": "Propiedad intelectual",
             "descripcion": "",
-            "tipos_poa": ["PTT"]
+            "características": "0; 8.1; 0",
+            "asociaciones": {
+                "PTT": ["8.1"]
+            }
         },
-        # Detalles específicos para PVIF, PVIS, PIGR, PIS, PIIF
-        {
-            "codigo": "730204",
-            "nombre": "Servicio de edición, impresión y reproducción (copias)",
-            "descripcion": "",
-            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
-        },
+        # Código 730207 - Difusión (resto de POAs)
         {
             "codigo": "730207",
             "nombre": "Servicio de difusion informacion y publicidad (banner, plotter, pancarta, afiches)",
             "descripcion": "",
-            "tipos_poa": ["PVIF", "PVIS", "PIGR", "PIS", "PIIF"]
+            "características": "0; 0; 6.2",
+            "asociaciones": {
+                "PVIF": ["6.2"], "PVIS": ["6.2"], "PIGR": ["6.2"], "PIS": ["6.2"], "PIIF": ["6.2"]
+            }
         },
     ]
 
@@ -511,14 +631,14 @@ async def seed_all_data():
         return result.scalars().first()
 
     # Función para crear DetalleTarea si no existe
-    async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion):
-        # Verificar si ya existe el detalle exacto (incluyendo nombre Y descripción)
+    async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion, características):
         result = await db.execute(
             select(DetalleTarea).where(
                 and_(
                     DetalleTarea.id_item_presupuestario == item_presupuestario.id_item_presupuestario,
                     DetalleTarea.nombre == nombre,
-                    DetalleTarea.descripcion == descripcion  # ← AGREGAR ESTA LÍNEA
+                    DetalleTarea.descripcion == descripcion,
+                    DetalleTarea.caracteristicas == características
                 )
             )
         )
@@ -530,17 +650,19 @@ async def seed_all_data():
                 id_item_presupuestario=item_presupuestario.id_item_presupuestario,
                 nombre=nombre,
                 descripcion=descripcion,
-                caracteristicas=None
+                caracteristicas=características
             )
             db.add(nuevo_detalle)
-            await db.flush()  # Para obtener el ID sin hacer commit
+            await db.flush()
             return nuevo_detalle
         
         return detalle_existente
 
-    # Procesar todos los detalles
-    detalles_creados = []
-    for detalle_info in detalles:
+    # Procesar todos los detalles y crear las asociaciones
+    asociaciones_realizadas = 0
+    detalles_procesados = 0
+
+    for detalle_info in detalles_con_asociaciones:
         # Obtener el item presupuestario
         item_presupuestario = await obtener_item_presupuestario(db, detalle_info["codigo"])
         
@@ -553,67 +675,42 @@ async def seed_all_data():
             db, 
             item_presupuestario, 
             detalle_info["nombre"], 
-            detalle_info["descripcion"]
+            detalle_info["descripcion"],
+            detalle_info["características"]
         )
         
-        # Guardar información para asociaciones posteriores
-        detalles_creados.append({
-            "detalle_tarea": detalle_tarea,
-            "tipos_poa": detalle_info["tipos_poa"]
-        })
-
-    await db.commit()
-    print(f"✅ Se procesaron {len(detalles_creados)} detalles de tarea.")
-
-    # ─────────────────────────────────────────────────────────────────────────────
-    # Insertar relaciones TIPO_POA_DETALLE_TAREA
-    # ─────────────────────────────────────────────────────────────────────────────
-
-    async def asociar_detalles_a_tipos_poa(db, detalles_creados):
-        # Mapear los códigos reales de TipoPOA
-        tipos_poa_map = {}
-        codigos_tipo = ["PIM", "PTT", "PVIF", "PIIF", "PIS", "PIGR", "PVIS"]
+        detalles_procesados += 1
+        print(f"📝 Procesando detalle: {detalle_info['nombre'][:50]}...")
         
-        for codigo in codigos_tipo:
-            result = await db.execute(select(TipoPOA).where(TipoPOA.codigo_tipo == codigo))
-            tipo_poa = result.scalars().first()
-            if tipo_poa:
-                tipos_poa_map[codigo] = tipo_poa
-            else:
-                print(f"⚠️ No se encontró TipoPOA con código: {codigo}")
-
-        asociaciones_realizadas = 0
-        
-        for detalle_info in detalles_creados:
-            detalle_tarea = detalle_info["detalle_tarea"]
-            tipos_poa_codigos = detalle_info["tipos_poa"]
-            
-            for codigo_tipo in tipos_poa_codigos:
-                tipo_poa = tipos_poa_map.get(codigo_tipo)
-                if not tipo_poa:
-                    continue
-                    
-                # Verificar si la asociación ya existe
-                result = await db.execute(
-                    select(TipoPoaDetalleTarea).where(
-                        and_(
-                            TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
-                            TipoPoaDetalleTarea.id_detalle_tarea == detalle_tarea.id_detalle_tarea
-                        )
+        # Crear las asociaciones con los tipos de POA
+        for codigo_tipo_poa, tareas in detalle_info["asociaciones"].items():
+            tipo_poa = tipos_poa_map.get(codigo_tipo_poa)
+            if not tipo_poa:
+                print(f"⚠️ No se encontró TipoPOA con código: {codigo_tipo_poa}")
+                continue
+                
+            # Verificar si la asociación ya existe
+            result = await db.execute(
+                select(TipoPoaDetalleTarea).where(
+                    and_(
+                        TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa,
+                        TipoPoaDetalleTarea.id_detalle_tarea == detalle_tarea.id_detalle_tarea
                     )
                 )
-                
-                if not result.scalars().first():
-                    nueva_asociacion = TipoPoaDetalleTarea(
-                        id_tipo_poa_detalle_tarea=uuid.uuid4(),
-                        id_tipo_poa=tipo_poa.id_tipo_poa,
-                        id_detalle_tarea=detalle_tarea.id_detalle_tarea
-                    )
-                    db.add(nueva_asociacion)
-                    asociaciones_realizadas += 1
+            )
+            
+            if not result.scalars().first():
+                nueva_asociacion = TipoPoaDetalleTarea(
+                    id_tipo_poa_detalle_tarea=uuid.uuid4(),
+                    id_tipo_poa=tipo_poa.id_tipo_poa,
+                    id_detalle_tarea=detalle_tarea.id_detalle_tarea
+                )
+                db.add(nueva_asociacion)
+                asociaciones_realizadas += 1
+                print(f"✅ Asociación creada: {codigo_tipo_poa} -> {detalle_tarea.nombre[:30]}... (tareas: {', '.join(tareas)})")
 
-        await db.commit()
-        print(f"✅ Se crearon {asociaciones_realizadas} asociaciones nuevas entre TipoPOA y DetalleTarea.")
-
-    # Ejecutar las asociaciones
-    await asociar_detalles_a_tipos_poa(db, detalles_creados)
+    await db.commit()
+    print(f"\n🎉 RESUMEN FINAL:")
+    print(f"✅ Se procesaron {detalles_procesados} detalles de tarea.")
+    print(f"✅ Se crearon {asociaciones_realizadas} asociaciones nuevas entre TipoPOA y DetalleTarea.")
+    print(f"🔍 Verificación: Se crearon asociaciones para los códigos de items presupuestarios desde 730606 hasta 730207")

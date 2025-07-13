@@ -152,28 +152,32 @@ class ActividadesBatchCreate(BaseModel):
     actividades: List[ActividadCreate]
 
 class TareaCreate(BaseModel):
-    id_detalle_tarea: UUID
-    nombre: str
-    detalle_descripcion: str
-    cantidad: condecimal(gt=0)
-    precio_unitario: condecimal(gt=0)
+    id_detalle_tarea: Optional[UUID] = None
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
 class TareaOut(BaseModel):
     id_tarea: UUID
-    nombre: str
-    detalle_descripcion: str
-    cantidad: condecimal(gt=0)
-    precio_unitario: condecimal(gt=0)
-    total: condecimal(gt=0)
-    saldo_disponible: condecimal(gt=0)
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    total: Optional[condecimal(ge=0)] = 0
+    saldo_disponible: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
     class Config:
         from_attributes = True
+
 
 class DetalleTareaOut(BaseModel):
     id_detalle_tarea: UUID
     nombre: str
     descripcion: Optional[str]
+    caracteristicas: Optional[str]  # Nuevo campo para información específica de la tarea
     id_item_presupuestario: Optional[UUID]  # Nuevo campo agregado
 
     class Config:
@@ -184,6 +188,7 @@ class ActividadOut(BaseModel):
     descripcion_actividad: str
     total_por_actividad: condecimal(max_digits=18, decimal_places=2)
     saldo_actividad: condecimal(max_digits=18, decimal_places=2)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
     class Config:
         from_attributes = True
@@ -193,12 +198,13 @@ class ActividadUpdate(BaseModel):
 
 class TareaOut(BaseModel):
     id_tarea: UUID
-    nombre: str
-    detalle_descripcion: Optional[str]
-    cantidad: condecimal(max_digits=10, decimal_places=2)
-    precio_unitario: condecimal(max_digits=18, decimal_places=2)
-    total: condecimal(max_digits=18, decimal_places=2)
-    saldo_disponible: condecimal(max_digits=18, decimal_places=2)
+    nombre: Optional[str] = None
+    detalle_descripcion: Optional[str] = None
+    cantidad: Optional[condecimal(ge=0)] = 0
+    precio_unitario: Optional[condecimal(ge=0)] = 0
+    total: Optional[condecimal(ge=0)] = 0
+    saldo_disponible: Optional[condecimal(ge=0)] = 0
+    lineaPaiViiv: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -206,6 +212,7 @@ class TareaOut(BaseModel):
 class TareaUpdate(BaseModel):
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
+    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
 
 #reformas
@@ -237,11 +244,13 @@ class TareaCreateReforma(BaseModel):
     cantidad: condecimal(gt=0)
     precio_unitario: condecimal(gt=0)
     justificacion: str
+    lineaPaiViiv: Optional[int] = None
 
 class TareaEditReforma(BaseModel):
     cantidad: Optional[condecimal(gt=0)]
     precio_unitario: Optional[condecimal(gt=0)]
     justificacion: str
+    lineaPaiViiv: Optional[int] = None
 
 class HistoricoPoaOut(BaseModel):
     campo_modificado: str

@@ -1,4 +1,5 @@
 from datetime import datetime,timezone,timedelta
+from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -626,7 +627,9 @@ async def crear_tarea(
     if not detalle:
         raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
 
-    total = data.precio_unitario * data.cantidad
+    cantidad = data.cantidad or Decimal("0")
+    precio_unitario = data.precio_unitario or Decimal("0")
+    total = precio_unitario * cantidad
 
     nueva_tarea = models.Tarea(
         id_tarea=uuid.uuid4(),
@@ -634,10 +637,11 @@ async def crear_tarea(
         id_detalle_tarea=data.id_detalle_tarea,
         nombre=data.nombre,
         detalle_descripcion=data.detalle_descripcion,
-        cantidad=data.cantidad,
-        precio_unitario=data.precio_unitario,
+        cantidad=cantidad,
+        precio_unitario=precio_unitario,
         total=total,
-        saldo_disponible=total
+        saldo_disponible=total,
+        lineaPaiViiv=data.lineaPaiViiv
     )
 
     # Actualizar montos en la actividad
@@ -676,7 +680,7 @@ async def editar_tarea(
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     
     # Campos a actualizar y auditar
-    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible"]
+    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible","lineaPaiViiv"]
 
     for campo in campos_auditar:
         valor_anterior = getattr(tarea, campo)
@@ -870,6 +874,8 @@ async def editar_tarea_en_reforma(
     tarea.precio_unitario = data.precio_unitario
     tarea.total = data.cantidad * data.precio_unitario
     tarea.saldo_disponible = tarea.total  # ajustar si hay lógica adicional
+    if data.lineaPaiViiv is not None:
+        tarea.lineaPaiViiv = data.lineaPaiViiv
 
     db.add(tarea)
 
@@ -956,7 +962,8 @@ async def agregar_tarea_en_reforma(
         cantidad=data.cantidad,
         precio_unitario=data.precio_unitario,
         total=total,
-        saldo_disponible=total
+        saldo_disponible=total,
+        lineaPaiViiv=data.lineaPaiViiv
     )
     db.add(nueva_tarea)
 
@@ -1282,7 +1289,28 @@ async def get_item_presupuestario(
     if not item:
         raise HTTPException(status_code=404, detail="Item presupuestario no encontrado")
     return item
-  
+
+@app.get("/tareas/{id_tarea}/item-presupuestario", response_model=schemas.ItemPresupuestarioOut)
+async def obtener_item_presupuestario_de_tarea(
+    id_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    # Buscar la tarea y su detalle
+    result = await db.execute(
+        select(models.Tarea)
+        .where(models.Tarea.id_tarea == id_tarea)
+        .options(selectinload(models.Tarea.detalle_tarea).selectinload(models.DetalleTarea.item_presupuestario))
+    )
+    tarea = result.scalars().first()
+
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    if not tarea.detalle_tarea or not tarea.detalle_tarea.item_presupuestario:
+        raise HTTPException(status_code=404, detail="Item presupuestario no asociado a esta tarea")
+
+    return tarea.detalle_tarea.item_presupuestario
+
 @app.post("/reporte-poa/")
 async def reporte_poa(
     anio: str = Form(...),

@@ -65,7 +65,7 @@ class Proyecto(Base):
 
     id_proyecto = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_proyecto = Column(String(50), nullable=False)
-    titulo = Column(String(200), nullable=False)
+    titulo = Column(String(2000), nullable=False)
     id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
     id_estado_proyecto = Column(UUID(as_uuid=True), ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
     id_director_proyecto = Column(String(200), nullable=True)
@@ -187,13 +187,15 @@ class Tarea(Base):
 
     id_tarea = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_actividad = Column(UUID(as_uuid=True), ForeignKey("ACTIVIDAD.id_actividad"), nullable=False)
-    id_detalle_tarea = Column(UUID(as_uuid=True), ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=False)
+    id_detalle_tarea = Column(UUID(as_uuid=True), ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=True)
     nombre = Column(String(200))
+
     detalle_descripcion = Column(String(5000))
-    cantidad = Column(DECIMAL(10, 2), nullable=False)
-    precio_unitario = Column(DECIMAL(18, 2), nullable=False)
-    total = Column(DECIMAL(18, 2), nullable=False)
-    saldo_disponible = Column(DECIMAL(18, 2), nullable=False)
+    cantidad = Column(DECIMAL(10, 2), nullable=True, default=0)
+    precio_unitario = Column(DECIMAL(18, 2), nullable=True, default=0)
+    total = Column(DECIMAL(18, 2), nullable=True, default=0)
+    saldo_disponible = Column(DECIMAL(18, 2), nullable=True, default=0)
+    lineaPaiViiv = Column(Integer, nullable=True)
 
     actividad = relationship("Actividad", back_populates="tareas")
     detalle_tarea = relationship("DetalleTarea")
