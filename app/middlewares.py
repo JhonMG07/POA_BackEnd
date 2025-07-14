@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 def add_middlewares(app: FastAPI) -> None:
     origins = [
-        "http://localhost:5173",
-        "https://tudominio.com",
+        "*"
     ]
 
     app.add_middleware(
