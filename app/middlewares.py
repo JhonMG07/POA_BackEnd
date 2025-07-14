@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 def add_middlewares(app: FastAPI) -> None:
     origins = [
-        "*"
+        "https://poa-front.vercel.app"
     ]
 
     app.add_middleware(
