@@ -680,7 +680,7 @@ async def editar_tarea(
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     
     # Campos a actualizar y auditar
-    campos_auditar = ["cantidad", "precio_unitario", "total", "saldo_disponible","lineaPaiViiv"]
+    campos_auditar = ["cantidad", "precio_unitario","lineaPaiViiv"]
 
     for campo in campos_auditar:
         valor_anterior = getattr(tarea, campo)
