@@ -484,43 +484,57 @@ async def editar_proyecto(
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
-    # Validar que el proyecto exista
-    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
-    proyecto = result.scalars().first()
-
-    if not proyecto:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-
-    # Validar que el usuario sea el director del proyecto
-    # if proyecto.id_director_proyecto != usuario.id_usuario:
-    #     raise HTTPException(status_code=403, detail="Solo el director del proyecto puede editarlo")
-
-    # Validar tipo y estado
-    tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
-    if not tipo.scalars().first():
-        raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
-
-    estado = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
-    if not estado.scalars().first():
-        raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
-
-    # Actualizar campos
-    proyecto.codigo_proyecto = data.codigo_proyecto
-    proyecto.titulo = data.titulo
-    proyecto.id_tipo_proyecto = data.id_tipo_proyecto
-    proyecto.id_estado_proyecto = data.id_estado_proyecto
-    proyecto.fecha_creacion = data.fecha_creacion
-    proyecto.fecha_inicio = data.fecha_inicio
-    proyecto.fecha_fin = data.fecha_fin
-    proyecto.fecha_prorroga = data.fecha_prorroga
-    proyecto.fecha_prorroga_inicio = data.fecha_prorroga_inicio
-    proyecto.fecha_prorroga_fin = data.fecha_prorroga_fin
-    proyecto.presupuesto_aprobado = data.presupuesto_aprobado
-    proyecto.id_director_proyecto = data.id_director_proyecto
-
-    await db.commit()
-    await db.refresh(proyecto)
-    return proyecto
+    try:
+        result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
+        proyecto = result.scalars().first()
+ 
+        if not proyecto:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+ 
+        # Validar tipo y estado
+        tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
+        if not tipo.scalars().first():
+            raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
+ 
+        estado = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
+        if not estado.scalars().first():
+            raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
+ 
+        # Campos a auditar
+        campos_auditar = [
+            "codigo_proyecto", "titulo", "id_tipo_proyecto", "id_estado_proyecto",
+            "fecha_creacion", "fecha_inicio", "fecha_fin", "fecha_prorroga",
+            "fecha_prorroga_inicio", "fecha_prorroga_fin", "presupuesto_aprobado",
+            "id_director_proyecto"
+        ]
+ 
+        for campo in campos_auditar:
+            if not hasattr(data, campo):
+                continue
+ 
+            valor_anterior = getattr(proyecto, campo)
+            valor_nuevo = getattr(data, campo)
+ 
+            if valor_anterior != valor_nuevo:
+                historico = models.HistoricoProyecto(
+                    id_historico=uuid.uuid4(),
+                    id_proyecto=proyecto.id_proyecto,
+                    id_usuario=usuario.id_usuario,
+                    fecha_modificacion=datetime.utcnow(),
+                    campo_modificado=campo,
+                    valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
+                    valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                    justificacion="Actualización manual de proyecto"
+                )
+                db.add(historico)
+                setattr(proyecto, campo, valor_nuevo)
+ 
+        await db.commit()
+        await db.refresh(proyecto)
+        return proyecto
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Error interno al editar el proyecto")
 
 
 @app.get("/proyectos/", response_model=List[schemas.ProyectoOut])
@@ -669,42 +683,64 @@ async def eliminar_tarea(id_tarea: uuid.UUID, db: AsyncSession = Depends(get_db)
 
 @app.put("/tareas/{id_tarea}")
 async def editar_tarea(
-    id_tarea: uuid.UUID, 
-    data: schemas.TareaUpdate, 
+    id_tarea: uuid.UUID,
+    data: schemas.TareaUpdate,
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
-    ):
-    result = await db.execute(select(models.Tarea).where(models.Tarea.id_tarea == id_tarea))
-    tarea = result.scalars().first()
-    if not tarea:
-        raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    
-    # Campos a actualizar y auditar
-    campos_auditar = ["cantidad", "precio_unitario","lineaPaiViiv"]
-
-    for campo in campos_auditar:
-        valor_anterior = getattr(tarea, campo)
-        valor_nuevo = getattr(data, campo)
-        
-        if valor_anterior != valor_nuevo:
-            # Registrar en histórico
-            historico = models.HistoricoPoa(
-                id_historico=uuid.uuid4(),
-                id_poa=tarea.actividad.id_poa,
-                id_usuario=usuario.id_usuario,
-                fecha_modificacion=datetime.utcnow(),
-                campo_modificado=campo,
-                valor_anterior=str(valor_anterior),
-                valor_nuevo=str(valor_nuevo),
-                justificacion="Actualización manual de tarea"
-            )
-            db.add(historico)
-            setattr(tarea, campo, valor_nuevo)
-
-    await db.commit()
-    await db.refresh(tarea)
-
-    return {"msg": "Tarea actualizada", "tarea": tarea}
+):
+    try:
+        # Obtener la tarea
+        result = await db.execute(
+            select(models.Tarea).where(models.Tarea.id_tarea == id_tarea)
+        )
+        tarea = result.scalars().first()
+ 
+        if not tarea:
+            raise HTTPException(status_code=404, detail="Tarea no encontrada")
+ 
+        # Obtener la actividad relacionada
+        result_actividad = await db.execute(
+            select(models.Actividad).where(models.Actividad.id_actividad == tarea.id_actividad)
+        )
+        actividad = result_actividad.scalars().first()
+        if not actividad:
+            raise HTTPException(status_code=404, detail="Actividad no encontrada")
+ 
+        id_poa = actividad.id_poa
+ 
+        # Campos a auditar
+        campos_auditar = ["cantidad", "precio_unitario", "lineaPaiViiv"]
+ 
+        for campo in campos_auditar:
+            if not hasattr(data, campo):
+                continue  # evita fallos por campos no presentes
+ 
+            valor_anterior = getattr(tarea, campo)
+            valor_nuevo = getattr(data, campo)
+ 
+            if valor_anterior != valor_nuevo:
+                historico = models.HistoricoPoa(
+                    id_historico=uuid.uuid4(),
+                    id_poa=id_poa,
+                    id_usuario=usuario.id_usuario,
+                    fecha_modificacion=datetime.utcnow(),
+                    campo_modificado=campo,
+                    valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
+                    valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                    justificacion="Actualización manual de tarea",
+                    id_reforma=None
+                )
+                db.add(historico)
+                setattr(tarea, campo, valor_nuevo)
+ 
+        await db.commit()
+        await db.refresh(tarea)
+ 
+        return {"msg": "Tarea actualizada", "tarea": tarea}
+ 
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Error interno al editar la tarea")
 
 #detalles tarea por poa
 @app.get("/poas/{id_poa}/detalles_tarea", response_model=List[schemas.DetalleTareaOut])
